@@ -45,6 +45,7 @@ function GetValidPositions(ht) {
     return valid;
 }
 function PlaceValidCollection() {
+    console.log("PlaceValidCollection")
     if (validCollection) {
         let types = [];
         for (let i = 0; i < validCollection.length; i++) {
@@ -117,8 +118,6 @@ function hold(ht) {
             validCollection = collection;
         }
     }
-
-
     drawTile(ht)
 }
 function ceckformatches(setupOn = false) {
