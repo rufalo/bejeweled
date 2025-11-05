@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Match Three</title>
+    <script src="p5.min.js"></script>
+    <script src="addons/p5.dom.min.js"></script>
+    <script src="addons/p5.sound.min.js"></script>
+    <script src="empty-example/matchThree.js"></script>
+    <style>
+      body {
+        padding: 0;
+        margin: 0;
+        background: #000;
+      }
+      main {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .fallback {
+        font-family: sans-serif;
+        color: #fff;
+        margin-top: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <noscript>
+        <p class="fallback">
+          JavaScript is required to play the match three game.
+        </p>
+      </noscript>
+    </main>
+  </body>
+</html>
