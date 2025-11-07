@@ -41,7 +41,7 @@ function setup() {
         color(244, 67, 54),   // Softer red
         color(156, 39, 176),  // Purple
         color(255, 193, 7),   // Amber/Yellow
-        color(0, 188, 212)    // Cyan
+        color(100, 220, 255)  // Cyan (lighter blue)
     ]
     
     // Load high score from localStorage
