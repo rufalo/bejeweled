@@ -8,7 +8,7 @@
     <script src="addons/p5.dom.min.js"></script>
     <script src="game.js?v=2"></script>
     <style>
-      body {
+        body {
         padding: 0;
         margin: 0;
         background: #000;
@@ -24,9 +24,48 @@
         align-items: center;
         justify-content: center;
       }
-      canvas {
+        canvas {
         display: block;
       }
+        #header-container {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          align-items: center;
+          margin-bottom: 20px;
+        }
+        #daily-info {
+          font-family: sans-serif;
+          color: #fff;
+          font-size: 14px;
+        }
+        .hidden {
+          display: none !important;
+        }
+        #mode-container {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          justify-content: center;
+        }
+        .mode-btn {
+          background-color: #424242;
+          color: white;
+          border: none;
+          padding: 10px 18px;
+          font-family: sans-serif;
+          font-size: 14px;
+          border-radius: 20px;
+          cursor: pointer;
+          transition: all 0.25s;
+        }
+        .mode-btn:hover:not(.active) {
+          background-color: #616161;
+        }
+        .mode-btn.active {
+          background-color: #FF9800;
+          box-shadow: 0 0 12px rgba(255, 152, 0, 0.8);
+        }
       #game-container {
         display: flex;
         flex-direction: column;
@@ -38,7 +77,7 @@
         gap: 20px;
         align-items: center;
       }
-      .restart-btn {
+        .restart-btn {
         background-color: #4CAF50;
         border: none;
         color: white;
@@ -65,7 +104,7 @@
         justify-content: center;
         align-items: center;
       }
-      .item-btn {
+        .item-btn {
         background-color: #2196F3;
         border: none;
         color: white;
@@ -107,7 +146,37 @@
         font-size: 18px;
         font-weight: bold;
       }
-      .cancel-btn {
+        #crafting-container {
+          margin-top: 10px;
+          display: flex;
+          gap: 12px;
+          justify-content: center;
+          align-items: center;
+        }
+        .craft-btn {
+          background-color: #9C27B0;
+          border: none;
+          color: white;
+          padding: 10px 18px;
+          font-size: 14px;
+          font-family: sans-serif;
+          cursor: pointer;
+          border-radius: 6px;
+          transition: background-color 0.3s, transform 0.2s;
+        }
+        .craft-btn:disabled {
+          background-color: #5E2A68;
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .craft-btn:hover:not(:disabled) {
+          background-color: #7B1FA2;
+          transform: translateY(-2px);
+        }
+        .craft-btn:active:not(:disabled) {
+          transform: translateY(0);
+        }
+        .cancel-btn {
         background-color: #f44336;
         border: none;
         color: white;
@@ -124,9 +193,35 @@
       .cancel-btn.visible {
         display: inline-block;
       }
-      .cancel-btn:hover {
+        .cancel-btn:hover {
         background-color: #d32f2f;
       }
+        #ui-container {
+          margin-top: 20px;
+          display: flex;
+          gap: 15px;
+          justify-content: center;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .utility-btn {
+          background-color: #607D8B;
+          border: none;
+          color: white;
+          padding: 10px 18px;
+          font-family: sans-serif;
+          font-size: 14px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background-color 0.3s, transform 0.2s;
+        }
+        .utility-btn:hover {
+          background-color: #546E7A;
+          transform: translateY(-2px);
+        }
+        .utility-btn:active {
+          transform: translateY(0);
+        }
       #score-container {
         margin-top: 15px;
         display: flex;
@@ -137,7 +232,7 @@
         color: white;
         font-size: 20px;
       }
-      .score-item {
+        .score-item {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -151,7 +246,75 @@
         font-size: 28px;
         font-weight: bold;
       }
-      .fallback {
+        #level-container {
+          margin-top: 20px;
+          font-family: sans-serif;
+          color: white;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          align-items: center;
+          text-align: center;
+        }
+        #level-title {
+          font-size: 26px;
+          font-weight: bold;
+        }
+        #level-description {
+          font-size: 16px;
+          color: #bbb;
+          max-width: 420px;
+        }
+        #goal-progress {
+          width: 320px;
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 12px;
+          overflow: hidden;
+          position: relative;
+        }
+        #goal-progress-bar {
+          background: linear-gradient(90deg, #4CAF50, #8BC34A);
+          height: 24px;
+          width: 0%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 14px;
+          font-weight: bold;
+          color: #0d270d;
+          transition: width 0.4s ease;
+        }
+        #goal-progress-label {
+          z-index: 1;
+        }
+        #streak-container {
+          margin-top: 15px;
+          width: 320px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          font-family: sans-serif;
+          color: white;
+          align-items: center;
+        }
+        #streak-label {
+          font-size: 14px;
+          color: #aaa;
+        }
+        #streak-bar {
+          width: 100%;
+          height: 14px;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 7px;
+          overflow: hidden;
+        }
+        #streak-progress {
+          width: 0%;
+          height: 100%;
+          background: linear-gradient(90deg, #FFC107, #FF5722);
+          transition: width 0.25s ease;
+        }
+        .fallback {
         font-family: sans-serif;
         color: #fff;
         margin-top: 1rem;
@@ -159,24 +322,58 @@
     </style>
   </head>
   <body>
-    <main>
-      <div id="game-container"></div>
-      <div id="score-container">
-        <div class="score-item">
-          <div class="score-label">Score</div>
-          <div class="score-value" id="score-display">0</div>
+      <main>
+        <div id="header-container">
+          <div id="mode-container">
+            <button class="mode-btn active" data-mode="classic">Classic</button>
+            <button class="mode-btn" data-mode="timed">Timed</button>
+            <button class="mode-btn" data-mode="moves">Moves</button>
+            <button class="mode-btn" data-mode="daily">Daily Challenge</button>
+          </div>
+          <div id="daily-info" class="hidden">Daily seed: <span id="daily-seed"></span></div>
         </div>
-        <div class="score-item">
-          <div class="score-label">Moves</div>
-          <div class="score-value" id="moves-display">0</div>
+        <div id="game-container"></div>
+        <div id="score-container">
+          <div class="score-item">
+            <div class="score-label">Score</div>
+            <div class="score-value" id="score-display">0</div>
+          </div>
+          <div class="score-item">
+            <div class="score-label">Moves</div>
+            <div class="score-value" id="moves-display">0</div>
+          </div>
+          <div class="score-item">
+            <div class="score-label">Best</div>
+            <div class="score-value" id="best-display">0</div>
+          </div>
+          <div class="score-item timed-only hidden">
+            <div class="score-label">Time</div>
+            <div class="score-value" id="timer-display">0</div>
+          </div>
         </div>
-        <div class="score-item">
-          <div class="score-label">Best</div>
-          <div class="score-value" id="best-display">0</div>
+        <div id="level-container">
+          <div id="level-title">Level 1</div>
+          <div id="level-description">Reach the score goal to advance!</div>
+          <div id="goal-progress">
+            <div id="goal-progress-bar"><span id="goal-progress-label">0%</span></div>
+          </div>
         </div>
-      </div>
-      <div id="items-container"></div>
-      <div id="ui-container"></div>
+        <div id="streak-container">
+          <div id="streak-label">Combo Meter</div>
+          <div id="streak-bar">
+            <div id="streak-progress"></div>
+          </div>
+        </div>
+        <div id="items-container"></div>
+        <div id="crafting-container">
+          <button id="craft-mega-hammer" class="craft-btn" disabled>Craft Mega Hammer</button>
+          <button id="craft-color-bomb" class="craft-btn" disabled>Craft Color Bomb</button>
+        </div>
+        <div id="ui-container">
+          <button id="hint-btn" class="utility-btn">Hint</button>
+          <button id="shuffle-btn" class="utility-btn">Shuffle</button>
+          <button id="share-btn" class="utility-btn">Share</button>
+        </div>
       <noscript>
         <p class="fallback">
           JavaScript is required to play the match three game.
