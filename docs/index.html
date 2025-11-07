@@ -6,20 +6,150 @@
     <title>Match Three</title>
     <script src="p5.min.js"></script>
     <script src="addons/p5.dom.min.js"></script>
-    <script src="addons/p5.sound.min.js"></script>
-      <script src="game.js"></script>
+    <script src="game.js"></script>
     <style>
       body {
         padding: 0;
         margin: 0;
         background: #000;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        overflow: hidden;
       }
       main {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-height: 100vh;
+      }
+      canvas {
+        display: block;
+      }
+      #game-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #ui-container {
+        margin-top: 20px;
+        display: flex;
+        gap: 20px;
+        align-items: center;
+      }
+      .restart-btn {
+        background-color: #4CAF50;
+        border: none;
+        color: white;
+        padding: 12px 24px;
+        text-align: center;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 16px;
+        font-family: sans-serif;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+      }
+      .restart-btn:hover {
+        background-color: #45a049;
+      }
+      .restart-btn:active {
+        background-color: #3d8b40;
+      }
+      #items-container {
+        margin-top: 15px;
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        align-items: center;
+      }
+      .item-btn {
+        background-color: #2196F3;
+        border: none;
+        color: white;
+        padding: 10px 15px;
+        text-align: center;
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 14px;
+        font-family: sans-serif;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.3s;
+        min-width: 100px;
+      }
+      .item-btn:hover:not(:disabled) {
+        background-color: #1976D2;
+        transform: translateY(-2px);
+      }
+      .item-btn:active:not(:disabled) {
+        background-color: #1565C0;
+        transform: translateY(0);
+      }
+      .item-btn:disabled {
+        background-color: #666;
+        cursor: not-allowed;
+        opacity: 0.5;
+      }
+      .item-btn.active {
+        background-color: #FF9800;
+        box-shadow: 0 0 15px rgba(255, 152, 0, 0.7);
+      }
+      .item-name {
+        font-weight: bold;
+        margin-bottom: 5px;
+      }
+      .item-count {
+        font-size: 18px;
+        font-weight: bold;
+      }
+      .cancel-btn {
+        background-color: #f44336;
+        border: none;
+        color: white;
+        padding: 12px 20px;
+        text-align: center;
+        text-decoration: none;
+        display: none;
+        font-size: 16px;
+        font-family: sans-serif;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.3s;
+      }
+      .cancel-btn.visible {
+        display: inline-block;
+      }
+      .cancel-btn:hover {
+        background-color: #d32f2f;
+      }
+      #score-container {
+        margin-top: 15px;
+        display: flex;
+        gap: 30px;
+        justify-content: center;
+        align-items: center;
+        font-family: sans-serif;
+        color: white;
+        font-size: 20px;
+      }
+      .score-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .score-label {
+        font-size: 14px;
+        color: #aaa;
+        margin-bottom: 5px;
+      }
+      .score-value {
+        font-size: 28px;
+        font-weight: bold;
       }
       .fallback {
         font-family: sans-serif;
@@ -30,6 +160,23 @@
   </head>
   <body>
     <main>
+      <div id="game-container"></div>
+      <div id="score-container">
+        <div class="score-item">
+          <div class="score-label">Score</div>
+          <div class="score-value" id="score-display">0</div>
+        </div>
+        <div class="score-item">
+          <div class="score-label">Moves</div>
+          <div class="score-value" id="moves-display">0</div>
+        </div>
+        <div class="score-item">
+          <div class="score-label">Best</div>
+          <div class="score-value" id="best-display">0</div>
+        </div>
+      </div>
+      <div id="items-container"></div>
+      <div id="ui-container"></div>
       <noscript>
         <p class="fallback">
           JavaScript is required to play the match three game.

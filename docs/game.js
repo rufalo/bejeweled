@@ -1,199 +1,776 @@
 var grid = [];
 
-var gridSize = { x: 16, y: 8 };
+var gridSize = { x: 8, y: 8 };
 
 var tileSize = 75;
 
 var TypeColors;
 
-var dropRate = 2;
+var canvasWidth, canvasHeight;
 
-var clickPos = false;
+var dropRate = 5;
 
-/*
-var heldTile = false;
-var lastSlide = false;
-*/
+var selectedTile = null;
+var isSwapping = false;
+var swapSpeed = 5;
+var isDestroying = false;
+var destructionTimer = 0;
+var destructionDelay = 30;
+var score = 0;
+var moves = 0;
+var highScore = 0;
+var isFalling = false;
+var cascadeMultiplier = 1;
+var lastSwap = null;
+var hoverTile = null;
+var gameOver = false;
+var floatingTexts = [];
+
+// Item system
+var inventory = {
+    hammer: 0,      // Red matches
+    randomizer: 0,  // Blue matches
+    cycler: 0       // Green matches
+};
+var activeItem = null; // Currently active item
+var itemMode = false;  // Whether we're in item use mode
 function setup() {
     TypeColors = [
-        color(0, 200, 0),
-        color(0, 0, 200),
-        color(200, 0, 0),
-        color(200, 0, 200),
-        color(200, 200, 0),
-        color(0, 200, 200)
+        color(76, 175, 80),   // Softer green
+        color(66, 133, 244),  // Softer blue
+        color(244, 67, 54),   // Softer red
+        color(156, 39, 176),  // Purple
+        color(255, 193, 7),   // Amber/Yellow
+        color(0, 188, 212)    // Cyan
     ]
+    
+    // Load high score from localStorage
+    loadHighScore();
+    
+    // Calculate responsive tile size
+    calculateCanvasSize();
+    
     createGrid();
-    createCanvas(gridSize.x * tileSize, gridSize.y * tileSize);
+    let canvas = createCanvas(canvasWidth, canvasHeight);
+    canvas.parent('game-container');
+    
+    // Create item buttons
+    createItemButtons();
+    
+    // Create restart button
+    let restartBtn = createButton('Restart Game');
+    restartBtn.parent('ui-container');
+    restartBtn.mousePressed(restartGame);
+    restartBtn.class('restart-btn');
+}
+
+function createItemButtons() {
+    // Hammer button
+    let hammerBtn = createButton('');
+    hammerBtn.parent('items-container');
+    hammerBtn.class('item-btn');
+    hammerBtn.id('hammer-btn');
+    hammerBtn.mousePressed(() => activateItem('hammer'));
+    hammerBtn.html('<div class="item-name">🔨 Hammer</div><div class="item-count">0</div>');
+    
+    // Randomizer button
+    let randomizerBtn = createButton('');
+    randomizerBtn.parent('items-container');
+    randomizerBtn.class('item-btn');
+    randomizerBtn.id('randomizer-btn');
+    randomizerBtn.mousePressed(() => activateItem('randomizer'));
+    randomizerBtn.html('<div class="item-name">🎲 Randomizer</div><div class="item-count">0</div>');
+    
+    // Cycler button
+    let cyclerBtn = createButton('');
+    cyclerBtn.parent('items-container');
+    cyclerBtn.class('item-btn');
+    cyclerBtn.id('cycler-btn');
+    cyclerBtn.mousePressed(() => activateItem('cycler'));
+    cyclerBtn.html('<div class="item-name">🔄 Cycler</div><div class="item-count">0</div>');
+    
+    // Cancel button
+    let cancelBtn = createButton('Cancel');
+    cancelBtn.parent('items-container');
+    cancelBtn.class('cancel-btn');
+    cancelBtn.id('cancel-btn');
+    cancelBtn.mousePressed(cancelItemMode);
+}
+
+function updateItemUI() {
+    // Check if UI elements exist before updating
+    let hammerBtn = select('#hammer-btn');
+    if (!hammerBtn) return;
+    
+    let randomizerBtn = select('#randomizer-btn');
+    let cyclerBtn = select('#cycler-btn');
+    let cancelBtn = select('#cancel-btn');
+    
+    // Update button HTML with current counts
+    if (hammerBtn) {
+        hammerBtn.html('<div class="item-name">🔨 Hammer</div><div class="item-count">' + inventory.hammer + '</div>');
+        hammerBtn.elt.disabled = (inventory.hammer === 0);
+    }
+    
+    if (randomizerBtn) {
+        randomizerBtn.html('<div class="item-name">🎲 Randomizer</div><div class="item-count">' + inventory.randomizer + '</div>');
+        randomizerBtn.elt.disabled = (inventory.randomizer === 0);
+    }
+    
+    if (cyclerBtn) {
+        cyclerBtn.html('<div class="item-name">🔄 Cycler</div><div class="item-count">' + inventory.cycler + '</div>');
+        cyclerBtn.elt.disabled = (inventory.cycler === 0);
+    }
+    
+    // Update active state
+    if (hammerBtn) hammerBtn.removeClass('active');
+    if (randomizerBtn) randomizerBtn.removeClass('active');
+    if (cyclerBtn) cyclerBtn.removeClass('active');
+    
+    if (activeItem === 'hammer' && hammerBtn) hammerBtn.addClass('active');
+    if (activeItem === 'randomizer' && randomizerBtn) randomizerBtn.addClass('active');
+    if (activeItem === 'cycler' && cyclerBtn) cyclerBtn.addClass('active');
+    
+    // Show/hide cancel button
+    if (cancelBtn) {
+        if (itemMode) {
+            cancelBtn.addClass('visible');
+        } else {
+            cancelBtn.removeClass('visible');
+        }
+    }
+}
+
+function loadHighScore() {
+    let saved = localStorage.getItem('bejeweledHighScore');
+    if (saved !== null) {
+        highScore = parseInt(saved);
+    }
+}
+
+function saveHighScore() {
+    if (score > highScore) {
+        highScore = score;
+        localStorage.setItem('bejeweledHighScore', highScore.toString());
+    }
+}
+
+function restartGame() {
+    // Reset all game state
+    score = 0;
+    moves = 0;
+    selectedTile = null;
+    isSwapping = false;
+    isDestroying = false;
+    destructionTimer = 0;
+    isFalling = false;
+    cascadeMultiplier = 1;
+    lastSwap = null;
+    hoverTile = null;
+    gameOver = false;
+    floatingTexts = [];
+    activeItem = null;
+    itemMode = false;
+    
+    // Reset inventory
+    inventory.hammer = 0;
+    inventory.randomizer = 0;
+    inventory.cycler = 0;
+    
+    // Clear and recreate grid
+    grid = [];
+    createGrid();
+}
+
+function calculateCanvasSize() {
+    // Get window dimensions with padding
+    let maxWidth = windowWidth - 40;
+    let maxHeight = windowHeight - 140; // Extra space for UI elements
+    
+    // Calculate tile size based on available space
+    let tileSizeByWidth = Math.floor(maxWidth / gridSize.x);
+    let tileSizeByHeight = Math.floor(maxHeight / gridSize.y);
+    
+    // Use the smaller tile size to ensure everything fits
+    tileSize = Math.min(tileSizeByWidth, tileSizeByHeight, 80); // Max 80px per tile
+    tileSize = Math.max(tileSize, 40); // Min 40px per tile
+    
+    canvasWidth = gridSize.x * tileSize;
+    canvasHeight = gridSize.y * tileSize;
 }
 
 function draw() {
-    if (!isMouseInside()){
-        ReleaseTile();
+    background(0);
+    
+    // Update cursor based on item mode
+    if (itemMode && isMouseInside()) {
+        cursor('crosshair');
+    } else if (isMouseInside()) {
+        cursor('pointer');
+    } else {
+        cursor(ARROW);
     }
     
-    background(0);
+    // Update hover state
+    if (isMouseInside() && !isSwapping) {
+        let hx = Math.floor(mouseX / tileSize);
+        let hy = Math.floor(mouseY / tileSize);
+        hoverTile = { x: hx, y: hy };
+    } else {
+        hoverTile = null;
+    }
+    
+    // Update swap animations
+    if (isSwapping) {
+        updateSwapAnimation();
+    }
+    
+    // Handle destruction timer
+    if (isDestroying) {
+        destructionTimer--;
+        if (destructionTimer <= 0) {
+            isDestroying = false;
+            applyGravity();
+        }
+    }
+    
+    // Check if tiles are falling
+    if (isFalling) {
+        checkFallingComplete();
+    }
     
     for (let y = 0; y < gridSize.y; y++) {
         for (let x = 0; x < gridSize.x; x++) {
             let tile = grid[y][x];
-            if (tile.alive && !tile.held) {
-                drawTile(x,y);
+            
+            // Highlight affected tiles in item mode
+            let highlighted = false;
+            if (itemMode && hoverTile && (activeItem === 'randomizer' || activeItem === 'cycler')) {
+                if (y === hoverTile.y || x === hoverTile.x) {
+                    highlighted = true;
+                }
+            }
+            
+            if (tile.alive) {
+                drawTile(x,y, highlighted);
+            } else if (tile.flash > 0) {
+                // Draw destruction animation
+                drawTile(x,y, false);
             }
         }
     }
-  
-    Holding3();
-}
-
-
-function Holding3(){
-    if (clickPos){
-        let current = {x:Math.floor(clickPos.x / tileSize),y:Math.floor(clickPos.y / tileSize)};
-        let tile = grid[current.y][current.x];
-        
-
-        let next = {x:Math.floor(mouseX / tileSize),y:Math.floor(mouseY / tileSize)};
-
-        let dif = {x:next.x - current.x,y:next.y - current.y};
-        let dir = {x:0,y:0};
-        if (dif.x < 0)
-            dir.x = -1;
-        if (dif.x > 0)
-            dir.x = 1;
-        if (dif.y < 0)
-            dir.y = -1;
-        if (dif.y > 0)
-            dir.y = 1;
-        
-        let magn = {x: Math.hypot(dif.x),y:Math.hypot(dif.y)};
-        let mouseDiff = {x:mouseX - (current.x * tileSize + (tileSize /2)),y: mouseY - (current.y *  tileSize + (tileSize /2))};
-        let collection = [];
-        collection.push(tile)
-        //tile.flash = 100;
-        if (magn.x > magn.y){
-            //horizontal
-            for (let i = 0; i <magn.x;i++){
-                let t = grid[current.y][current.x + dir.x * (i +1)];
-                collection.push(t);
-                t.slide.x = mouseDiff.x * -1;
-            }
-        }else{
-            // vertical
-            for (let i = 0; i <magn.y;i++){
-                let t = grid[current.y + dir.y * (i +1)][current.x];
-                collection.push(t);
-                t.slide.y = mouseDiff.y * -1;
-            }
-        }
-        // 
-        
-        console.log(mouseDiff);
-
-        drawTile(current.x,current.y);
-    }
-}
-
-function Holding2(){
-    if (heldTile){
-        let tile = grid[heldTile.y][heldTile.x];
-        let diff = {x: heldTile.x  * tileSize - (mouseX - tileSize /2), y: heldTile.y * tileSize - (mouseY - tileSize /2)}
-        let magn = {x: Math.hypot(diff.x),y:Math.hypot(diff.y)};
-
-        if (mouseX > (heldTile.x * tileSize)  && mouseX < (heldTile.x * tileSize) + tileSize ||
-            mouseY > (heldTile.y * tileSize)  && mouseY < (heldTile.y * tileSize) +  tileSize){
-            let direction = {x:0,y:0};
-            if (magn.x > magn.y){
-                direction.x = mouseX - heldTile.x *  tileSize - tileSize /2;
-            }else{
-                direction.y = mouseY - heldTile.y *  tileSize - tileSize /2;;
-            }
-            tile.slide.x = direction.x;
-            tile.slide.y = direction.y;
-
-            let nextCord = {x:Math.floor(mouseX / tileSize), y:Math.floor(mouseY / tileSize)};
-            let nextTile = grid[nextCord.y][nextCord.x];
-            nextTile.flash = 100;
     
-
-        }else{
-            tile.slide.x = 0;
-            tile.slide.y = 0;
-        }
-
+    // Update and draw floating texts
+    updateFloatingTexts();
+    
+    // Update item UI
+    updateItemUI();
+    
+    // Update score display
+    updateScoreDisplay();
+    
+    // Draw cascade multiplier if active
+    if (cascadeMultiplier > 1 && !gameOver) {
+        drawCascadeMultiplier();
+    }
+    
+    // Draw active item indicator
+    if (itemMode && !gameOver) {
+        drawItemModeIndicator();
+    }
+    
+    // Draw game over message
+    if (gameOver) {
+        drawGameOver();
     }
 }
 
+function drawItemModeIndicator() {
+    push();
+    fill(255, 152, 0);
+    textAlign(CENTER, CENTER);
+    textSize(24);
+    let itemName = activeItem.charAt(0).toUpperCase() + activeItem.slice(1);
+    text("Click a tile to use " + itemName, canvasWidth / 2, canvasHeight - 20);
+    pop();
+}
 
+function updateFloatingTexts() {
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        let ft = floatingTexts[i];
+        ft.life--;
+        ft.y -= 2; // Float upwards
+        
+        // Draw floating text
+        push();
+        let alpha = map(ft.life, 0, 60, 0, 255);
+        fill(255, 255, 255, alpha);
+        textAlign(CENTER, CENTER);
+        textSize(32);
+        stroke(0, 0, 0, alpha);
+        strokeWeight(3);
+        text(ft.text, ft.x, ft.y);
+        pop();
+        
+        // Remove if life is over
+        if (ft.life <= 0) {
+            floatingTexts.splice(i, 1);
+        }
+    }
+}
 
-function Holding(){
-    if (heldTile){
-        let tile = grid[heldTile.y][heldTile.x];
-        let diff = {x: heldTile.x  * tileSize - (mouseX - tileSize /2), y: heldTile.y * tileSize - (mouseY - tileSize /2)}
-        let magn = {x: Math.hypot(diff.x),y:Math.hypot(diff.y)};
-        //console.log(diff);
-        if (magn.x > magn.y){
-            if (mouseY > (heldTile.y * tileSize) && mouseY < (heldTile.y * tileSize)  + tileSize){ 
-                // Horizontal
-                if (diff.x > tileSize)
-                    diff.x = tileSize;
-                if (diff.x < -tileSize)
-                    diff.x = -tileSize;        
-                tile.slide.x = diff.x * -1;
-                tile.slide.y = 0;
-                if (diff.x < 0){
-                    // Right
-                    if(heldTile.x < gridSize.x -1){
-                        lastSlide = grid[heldTile.y][heldTile.x +1];
-                        lastSlide.slide.x = tile.slide.x * -1;
-                    }
-                }else{
-                    // left
-                    if(heldTile.x > 0){
-                        lastSlide = grid[heldTile.y][heldTile.x -1];
-                        lastSlide.slide.x = tile.slide.x * -1;
-                    }
-                }
-            }else{
-                tile.slide.x = 0;
-                tile.slide.y = 0;
+function drawCascadeMultiplier() {
+    push();
+    fill(255, 193, 7); // Amber color
+    textAlign(CENTER, CENTER);
+    textSize(48);
+    text(cascadeMultiplier + "x COMBO!", canvasWidth / 2, 50);
+    pop();
+}
+
+function drawGameOver() {
+    push();
+    fill(0, 0, 0, 200);
+    rect(0, 0, canvasWidth, canvasHeight);
+    
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(48);
+    text("GAME OVER!", canvasWidth / 2, canvasHeight / 2 - 40);
+    
+    textSize(24);
+    text("No more moves available", canvasWidth / 2, canvasHeight / 2 + 20);
+    text("Final Score: " + score, canvasWidth / 2, canvasHeight / 2 + 60);
+    pop();
+}
+
+function checkFallingComplete() {
+    let stillFalling = false;
+    
+    for (let y = 0; y < gridSize.y; y++) {
+        for (let x = 0; x < gridSize.x; x++) {
+            if (grid[y][x].drop > 0) {
+                stillFalling = true;
+                break;
             }
-        }else{
-            if (mouseX > (heldTile.x * tileSize) && mouseX < (heldTile.x * tileSize)  + tileSize){      
-                // Vertical
-                if (diff.y > tileSize)
-                    diff.y = tileSize;
-                if (diff.y < -tileSize)
-                    diff.y = -tileSize;   
-                tile.slide.y = diff.y * -1;
-                tile.slide.x = 0;
+        }
+        if (stillFalling) break;
+    }
+    
+    if (!stillFalling) {
+        isFalling = false;
+        // Check for cascade matches
+        checkForCascades();
+    }
+}
 
-                }else{
-                    tile.slide.x = 0;
-                    tile.slide.y = 0;
+function updateScoreDisplay() {
+    let scoreDisplay = select('#score-display');
+    let movesDisplay = select('#moves-display');
+    let bestDisplay = select('#best-display');
+    
+    if (scoreDisplay) scoreDisplay.html(score);
+    if (movesDisplay) movesDisplay.html(moves);
+    if (bestDisplay) bestDisplay.html(highScore);
+}
+
+function updateSwapAnimation() {
+    let stillAnimating = false;
+    
+    for (let y = 0; y < gridSize.y; y++) {
+        for (let x = 0; x < gridSize.x; x++) {
+            let tile = grid[y][x];
+            
+            // Animate slide
+            if (tile.slide.x !== 0 || tile.slide.y !== 0) {
+                stillAnimating = true;
+                
+                // Move towards 0
+                if (Math.abs(tile.slide.x) > 0) {
+                    if (tile.slide.x > 0) {
+                        tile.slide.x = Math.max(0, tile.slide.x - swapSpeed);
+                    } else {
+                        tile.slide.x = Math.min(0, tile.slide.x + swapSpeed);
+                    }
                 }
-                if (diff.y < 0){
-                    // Down
-
-                }else{
-                    // Up
-
+                
+                if (Math.abs(tile.slide.y) > 0) {
+                    if (tile.slide.y > 0) {
+                        tile.slide.y = Math.max(0, tile.slide.y - swapSpeed);
+                    } else {
+                        tile.slide.y = Math.min(0, tile.slide.y + swapSpeed);
+                    }
                 }
+            }
+        }
+    }
+    
+    // When animation completes, check for matches
+    if (!stillAnimating) {
+        isSwapping = false;
+        cascadeMultiplier = 1; // Reset cascade multiplier for new swap
+        
+        // Check if swap created any matches
+        let matches = findMatches();
+        if (matches.length === 0 && lastSwap !== null) {
+            // No matches - revert the swap
+            revertSwap();
+        } else {
+            // Valid swap - proceed with destruction
+            moves++; // Increment move counter for valid swaps
+            checkAndDestroyMatches();
+            lastSwap = null;
         }
     }
 }
 
+function revertSwap() {
+    if (lastSwap !== null) {
+        // Swap back
+        let temp = grid[lastSwap.tile1.y][lastSwap.tile1.x];
+        grid[lastSwap.tile1.y][lastSwap.tile1.x] = grid[lastSwap.tile2.y][lastSwap.tile2.x];
+        grid[lastSwap.tile2.y][lastSwap.tile2.x] = temp;
+        
+        lastSwap = null;
+    }
+}
 
-function drawTile(x,y){
-    strokeWeight(4);
-    stroke(0);
+function checkForCascades() {
+    let matches = findMatches();
+    
+    if (matches.length > 0) {
+        // Increase cascade multiplier for chain reactions
+        cascadeMultiplier++;
+        checkAndDestroyMatches();
+    } else {
+        // Reset cascade multiplier when no more matches
+        cascadeMultiplier = 1;
+        // Check for game over after cascades complete
+        if (!hasValidMoves()) {
+            gameOver = true;
+            saveHighScore();
+        }
+    }
+}
+
+function hasValidMoves() {
+    // Check all possible horizontal swaps
+    for (let y = 0; y < gridSize.y; y++) {
+        for (let x = 0; x < gridSize.x - 1; x++) {
+            if (wouldCreateMatch(x, y, x + 1, y)) {
+                return true;
+            }
+        }
+    }
+    
+    // Check all possible vertical swaps
+    for (let y = 0; y < gridSize.y - 1; y++) {
+        for (let x = 0; x < gridSize.x; x++) {
+            if (wouldCreateMatch(x, y, x, y + 1)) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+function wouldCreateMatch(x1, y1, x2, y2) {
+    // Temporarily swap tiles
+    let temp = grid[y1][x1];
+    grid[y1][x1] = grid[y2][x2];
+    grid[y2][x2] = temp;
+    
+    // Check if this creates a match
+    let hasMatch = false;
+    
+    // Check around first position
+    if (checkMatchAt(x1, y1)) hasMatch = true;
+    
+    // Check around second position
+    if (checkMatchAt(x2, y2)) hasMatch = true;
+    
+    // Swap back
+    temp = grid[y1][x1];
+    grid[y1][x1] = grid[y2][x2];
+    grid[y2][x2] = temp;
+    
+    return hasMatch;
+}
+
+function checkMatchAt(x, y) {
+    let type = grid[y][x].type;
+    
+    // Check horizontal
+    let horizontalCount = 1;
+    // Check left
+    for (let i = x - 1; i >= 0 && grid[y][i].alive && grid[y][i].type === type; i--) {
+        horizontalCount++;
+    }
+    // Check right
+    for (let i = x + 1; i < gridSize.x && grid[y][i].alive && grid[y][i].type === type; i++) {
+        horizontalCount++;
+    }
+    if (horizontalCount >= 3) return true;
+    
+    // Check vertical
+    let verticalCount = 1;
+    // Check up
+    for (let i = y - 1; i >= 0 && grid[i][x].alive && grid[i][x].type === type; i--) {
+        verticalCount++;
+    }
+    // Check down
+    for (let i = y + 1; i < gridSize.y && grid[i][x].alive && grid[i][x].type === type; i++) {
+        verticalCount++;
+    }
+    if (verticalCount >= 3) return true;
+    
+    return false;
+}
+
+function findMatches() {
+    let matches = [];
+    
+    // Check horizontal matches
+    for (let y = 0; y < gridSize.y; y++) {
+        for (let x = 0; x < gridSize.x - 2; x++) {
+            if (!grid[y][x].alive) continue;
+            
+            let type = grid[y][x].type;
+            let matchLength = 1;
+            
+            // Count consecutive tiles of same type
+            for (let i = x + 1; i < gridSize.x; i++) {
+                if (grid[y][i].alive && grid[y][i].type === type) {
+                    matchLength++;
+                } else {
+                    break;
+                }
+            }
+            
+            // If 3 or more, add to matches
+            if (matchLength >= 3) {
+                for (let i = 0; i < matchLength; i++) {
+                    matches.push({ x: x + i, y: y });
+                }
+                x += matchLength - 1; // Skip ahead
+            }
+        }
+    }
+    
+    // Check vertical matches
+    for (let x = 0; x < gridSize.x; x++) {
+        for (let y = 0; y < gridSize.y - 2; y++) {
+            if (!grid[y][x].alive) continue;
+            
+            let type = grid[y][x].type;
+            let matchLength = 1;
+            
+            // Count consecutive tiles of same type
+            for (let i = y + 1; i < gridSize.y; i++) {
+                if (grid[i][x].alive && grid[i][x].type === type) {
+                    matchLength++;
+                } else {
+                    break;
+                }
+            }
+            
+            // If 3 or more, add to matches
+            if (matchLength >= 3) {
+                for (let i = 0; i < matchLength; i++) {
+                    matches.push({ x: x, y: y + i });
+                }
+                y += matchLength - 1; // Skip ahead
+            }
+        }
+    }
+    
+    // Remove duplicates
+    let uniqueMatches = [];
+    for (let match of matches) {
+        let isDuplicate = false;
+        for (let unique of uniqueMatches) {
+            if (unique.x === match.x && unique.y === match.y) {
+                isDuplicate = true;
+                break;
+            }
+        }
+        if (!isDuplicate) {
+            uniqueMatches.push(match);
+        }
+    }
+    
+    return uniqueMatches;
+}
+
+function checkAndDestroyMatches() {
+    let matches = findMatches();
+    
+    if (matches.length > 0) {
+        // Count matched colors for item rewards
+        let colorCounts = {};
+        for (let match of matches) {
+            let tileType = grid[match.y][match.x].type;
+            colorCounts[tileType] = (colorCounts[tileType] || 0) + 1;
+        }
+        
+        // Award items based on matched colors
+        // 0: Green, 1: Blue, 2: Red, 3: Purple, 4: Yellow, 5: Cyan
+        if (colorCounts[2] >= 3) { // Red = Hammer
+            inventory.hammer++;
+        }
+        if (colorCounts[1] >= 3) { // Blue = Randomizer
+            inventory.randomizer++;
+        }
+        if (colorCounts[0] >= 3) { // Green = Cycler
+            inventory.cycler++;
+        }
+        
+        // Calculate score based on number of tiles matched
+        // 3 tiles = 30 points, 4 tiles = 50 points, 5+ tiles = 100 points
+        let baseScore = 0;
+        let matchCount = matches.length;
+        if (matchCount === 3) {
+            baseScore = 30;
+        } else if (matchCount === 4) {
+            baseScore = 50;
+        } else if (matchCount === 5) {
+            baseScore = 80;
+        } else {
+            baseScore = 100 + (matchCount - 5) * 20;
+        }
+        
+        // Apply cascade multiplier for chain reactions
+        let pointsEarned = baseScore * cascadeMultiplier;
+        score += pointsEarned;
+        
+        // Calculate center position of matches for floating text
+        let avgX = 0, avgY = 0;
+        for (let match of matches) {
+            avgX += match.x;
+            avgY += match.y;
+        }
+        avgX = (avgX / matches.length) * tileSize + tileSize / 2;
+        avgY = (avgY / matches.length) * tileSize + tileSize / 2;
+        
+        // Add floating text
+        floatingTexts.push({
+            x: avgX,
+            y: avgY,
+            text: "+" + pointsEarned,
+            life: 60
+        });
+        
+        // Destroy matched tiles with visual effects
+        for (let match of matches) {
+            grid[match.y][match.x].alive = false;
+            grid[match.y][match.x].flash = destructionDelay * 2;
+        }
+        
+        // Set destruction state
+        isDestroying = true;
+        destructionTimer = destructionDelay;
+    }
+}
+
+function applyGravity() {
+    let tilesDropped = false;
+    
+    // For each column, move tiles down
+    for (let x = 0; x < gridSize.x; x++) {
+        // Start from bottom and work up
+        for (let y = gridSize.y - 1; y >= 0; y--) {
+            if (!grid[y][x].alive) {
+                // Find the next alive tile above
+                for (let checkY = y - 1; checkY >= 0; checkY--) {
+                    if (grid[checkY][x].alive) {
+                        // Move this tile down
+                        grid[y][x] = grid[checkY][x];
+                        grid[checkY][x] = newTile();
+                        grid[checkY][x].alive = false;
+                        
+                        // Set drop animation
+                        let dropDistance = (y - checkY) * tileSize;
+                        grid[y][x].drop = dropDistance;
+                        
+                        tilesDropped = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Spawn new tiles at the top to fill empty spaces
+    for (let x = 0; x < gridSize.x; x++) {
+        for (let y = 0; y < gridSize.y; y++) {
+            if (!grid[y][x].alive) {
+                grid[y][x] = newTile();
+                grid[y][x].alive = true;
+                
+                // Set drop animation from above the screen
+                grid[y][x].drop = (y + 1) * tileSize;
+                tilesDropped = true;
+            }
+        }
+    }
+    
+    // After gravity and spawning, set falling state to check for cascades
+    if (tilesDropped) {
+        isFalling = true;
+    }
+}
+function drawTile(x,y, highlighted = false){
     let tile = grid[y][x];
     let pos = {
         x:(x * tileSize) + tile.slide.x,
         y:(y * tileSize) - tile.drop + tile.slide.y
     };
-    fill(TypeColors[tile.type]);
-    rect(pos.x, pos.y, tileSize, tileSize);
+    
+    let cornerRadius = tileSize / 8; // Rounded corners
+    
+    // If tile is being destroyed, shrink it
+    if (!tile.alive && tile.flash > 0) {
+        let scale = tile.flash / (destructionDelay * 2);
+        let shrink = (1 - scale) * tileSize / 2;
+        push();
+        strokeWeight(4);
+        stroke(0);
+        fill(TypeColors[tile.type]);
+        rect(pos.x + shrink, pos.y + shrink, tileSize - shrink * 2, tileSize - shrink * 2, cornerRadius);
+        pop();
+    } else {
+        push();
+        // Draw tile with border based on selection and hover state
+        if (tile.selected) {
+            strokeWeight(6);
+            stroke(255, 255, 100); // Yellow highlight for selected
+        } else if (highlighted) {
+            strokeWeight(5);
+            stroke(255, 152, 0); // Orange highlight for item mode
+        } else if (hoverTile && hoverTile.x === x && hoverTile.y === y) {
+            strokeWeight(5);
+            stroke(180, 180, 180); // Gray highlight for hover
+        } else {
+            strokeWeight(3);
+            stroke(40, 40, 40); // Darker border for depth
+        }
+        
+        // Draw tile with gradient-like effect (inner highlight)
+        fill(TypeColors[tile.type]);
+        rect(pos.x, pos.y, tileSize, tileSize, cornerRadius);
+        
+        // Add subtle highlight for 3D effect (brighter if highlighted)
+        noStroke();
+        if (highlighted) {
+            fill(255, 255, 255, 60);
+        } else {
+            fill(255, 255, 255, 30);
+        }
+        rect(pos.x + 2, pos.y + 2, tileSize - 4, tileSize / 2, cornerRadius);
+        pop();
+    }
+    
     if (tile.drop > 0) {
         if (tile.drop < 0) {
             tile.drop = 0;
@@ -201,17 +778,12 @@ function drawTile(x,y){
             tile.drop -= dropRate;
         }
     }
+    
     if (tile.flash > 0) {
-        let alpha = (tile.flash % 8) * 10 + 30;
-        fill(color(256, 256, 256, alpha));
-        rect(pos.x, pos.y, tileSize, tileSize);
-
-        if (tile.flash > 0) {
-            if (tile.flash < 0) {
-                tile.flash = 0;
-            } else {
-                tile.flash -= dropRate;
-            }
+        if (tile.flash < 0) {
+            tile.flash = 0;
+        } else {
+            tile.flash -= 1;
         }
     }
 }
@@ -225,48 +797,246 @@ function isMouseInside() {
 }
 
 function mousePressed() {
-    if (isMouseInside()) {
-        /*
+    if (isMouseInside() && !isSwapping && !gameOver) {
         let x = Math.floor(mouseX / tileSize);
         let y = Math.floor(mouseY / tileSize);
-        let tile = grid[y][x];
-        grabTile(y,x);
-        */
-        clickPos = {x: mouseX, y:mouseY};
+        
+        if (itemMode) {
+            useItem(x, y);
+        } else {
+            handleTileClick(x, y);
+        }
+    }
+}
 
+function activateItem(item) {
+    if (inventory[item] > 0 && !isSwapping && !isDestroying && !isFalling) {
+        activeItem = item;
+        itemMode = true;
+        
+        // Clear any selected tile
+        if (selectedTile) {
+            grid[selectedTile.y][selectedTile.x].selected = false;
+            selectedTile = null;
+        }
     }
 }
-function mouseReleased(){
-    ReleaseTile();
+
+function cancelItemMode() {
+    activeItem = null;
+    itemMode = false;
 }
-function ReleaseTile(){
-    /*
-    if (heldTile){
-        let tile = grid[heldTile.y][heldTile.x];
-        tile.held = false;
-        tile.slide.x = 0;
-        tile.slide.y = 0;
-        heldTile = false;        
-    }  */
-    if (clickPos){
-        clickPos = false;
+
+function keyPressed() {
+    // Press ESC to cancel item mode
+    if (keyCode === ESCAPE && itemMode) {
+        cancelItemMode();
     }
 }
-/*
-function grabTile(y,x){
-    heldTile = {x:x,y:y};
-    let tile = grid[heldTile.y][heldTile.x];
-    tile.held = true;
+
+function useItem(x, y) {
+    if (!activeItem || inventory[activeItem] <= 0) {
+        cancelItemMode();
+        return;
+    }
+    
+    // Execute item effect based on type
+    if (activeItem === 'hammer') {
+        useHammer(x, y);
+    } else if (activeItem === 'randomizer') {
+        useRandomizer(x, y);
+    } else if (activeItem === 'cycler') {
+        useCycler(x, y);
+    }
+    
+    // Deduct item from inventory
+    inventory[activeItem]--;
+    
+    // Exit item mode
+    cancelItemMode();
 }
-*/
+
+function useHammer(x, y) {
+    // Eliminate the clicked tile
+    if (grid[y][x].alive) {
+        grid[y][x].alive = false;
+        grid[y][x].flash = destructionDelay * 2;
+        
+        // Start destruction sequence which will trigger gravity
+        isDestroying = true;
+        destructionTimer = destructionDelay;
+    }
+}
+
+function useRandomizer(x, y) {
+    // Determine if we should randomize row or column
+    // Let's use a simple heuristic: if more empty spaces in column, randomize row, else column
+    let emptyInRow = 0;
+    let emptyInCol = 0;
+    
+    for (let i = 0; i < gridSize.x; i++) {
+        if (!grid[y][i].alive) emptyInRow++;
+    }
+    for (let i = 0; i < gridSize.y; i++) {
+        if (!grid[i][x].alive) emptyInCol++;
+    }
+    
+    if (emptyInRow >= emptyInCol) {
+        // Randomize the row
+        for (let i = 0; i < gridSize.x; i++) {
+            if (grid[y][i].alive) {
+                grid[y][i].type = Math.floor(Math.random() * TypeColors.length);
+            }
+        }
+    } else {
+        // Randomize the column
+        for (let i = 0; i < gridSize.y; i++) {
+            if (grid[i][x].alive) {
+                grid[i][x].type = Math.floor(Math.random() * TypeColors.length);
+            }
+        }
+    }
+    
+    // Check for matches after randomizing
+    setTimeout(() => {
+        let matches = findMatches();
+        if (matches.length > 0) {
+            checkAndDestroyMatches();
+        }
+    }, 100);
+}
+
+function useCycler(x, y) {
+    // Color cycle: 0:Green→1:Blue→2:Red→3:Purple→4:Yellow→5:Cyan→0:Green
+    
+    // Determine if we should cycle row or column (same logic as randomizer)
+    let emptyInRow = 0;
+    let emptyInCol = 0;
+    
+    for (let i = 0; i < gridSize.x; i++) {
+        if (!grid[y][i].alive) emptyInRow++;
+    }
+    for (let i = 0; i < gridSize.y; i++) {
+        if (!grid[i][x].alive) emptyInCol++;
+    }
+    
+    if (emptyInRow >= emptyInCol) {
+        // Cycle the row
+        for (let i = 0; i < gridSize.x; i++) {
+            if (grid[y][i].alive) {
+                grid[y][i].type = (grid[y][i].type + 1) % TypeColors.length;
+            }
+        }
+    } else {
+        // Cycle the column
+        for (let i = 0; i < gridSize.y; i++) {
+            if (grid[i][x].alive) {
+                grid[i][x].type = (grid[i][x].type + 1) % TypeColors.length;
+            }
+        }
+    }
+    
+    // Check for matches after cycling
+    setTimeout(() => {
+        let matches = findMatches();
+        if (matches.length > 0) {
+            checkAndDestroyMatches();
+        }
+    }, 100);
+}
+
+function handleTileClick(x, y) {
+    if (selectedTile === null) {
+        // Select first tile
+        selectedTile = { x: x, y: y };
+        grid[y][x].selected = true;
+    } else {
+        // Check if clicked tile is adjacent to selected tile
+        if (areAdjacent(selectedTile, { x: x, y: y })) {
+            // Clear selection
+            grid[selectedTile.y][selectedTile.x].selected = false;
+            // Swap tiles
+            swapTiles(selectedTile, { x: x, y: y });
+            selectedTile = null;
+        } else {
+            // Deselect old tile and select new tile
+            grid[selectedTile.y][selectedTile.x].selected = false;
+            selectedTile = { x: x, y: y };
+            grid[y][x].selected = true;
+        }
+    }
+}
+
+function areAdjacent(tile1, tile2) {
+    let dx = Math.abs(tile1.x - tile2.x);
+    let dy = Math.abs(tile1.y - tile2.y);
+    return (dx === 1 && dy === 0) || (dx === 0 && dy === 1);
+}
+
+function swapTiles(tile1Pos, tile2Pos) {
+    isSwapping = true;
+    
+    // Store swap for potential revert
+    lastSwap = { tile1: tile1Pos, tile2: tile2Pos };
+    
+    // Swap tiles in grid
+    let temp = grid[tile1Pos.y][tile1Pos.x];
+    grid[tile1Pos.y][tile1Pos.x] = grid[tile2Pos.y][tile2Pos.x];
+    grid[tile2Pos.y][tile2Pos.x] = temp;
+    
+    // Set up animation
+    let dx = (tile2Pos.x - tile1Pos.x) * tileSize;
+    let dy = (tile2Pos.y - tile1Pos.y) * tileSize;
+    
+    grid[tile1Pos.y][tile1Pos.x].slide.x = dx;
+    grid[tile1Pos.y][tile1Pos.x].slide.y = dy;
+    grid[tile2Pos.y][tile2Pos.x].slide.x = -dx;
+    grid[tile2Pos.y][tile2Pos.x].slide.y = -dy;
+}
 
 function createGrid() {
     for (let y = 0; y < gridSize.y; y++) {
         grid.push([]);
         for (let x = 0; x < gridSize.x; x++) {
-            grid[y].push(newTile());
+            grid[y].push(newTileNoMatch(x, y));
         }
     }
+}
+
+function newTileNoMatch(x, y) {
+    let attempts = 0;
+    let maxAttempts = 100;
+    let tile;
+    
+    while (attempts < maxAttempts) {
+        tile = newTile();
+        
+        // Check if this tile would create a horizontal match
+        let horizontalMatch = false;
+        if (x >= 2) {
+            if (grid[y][x-1].type === tile.type && grid[y][x-2].type === tile.type) {
+                horizontalMatch = true;
+            }
+        }
+        
+        // Check if this tile would create a vertical match
+        let verticalMatch = false;
+        if (y >= 2) {
+            if (grid[y-1][x].type === tile.type && grid[y-2][x].type === tile.type) {
+                verticalMatch = true;
+            }
+        }
+        
+        // If no match, return this tile
+        if (!horizontalMatch && !verticalMatch) {
+            return tile;
+        }
+        
+        attempts++;
+    }
+    
+    // If we couldn't find a tile after max attempts, return any tile
+    return tile;
 }
 
 function newTile() {
@@ -280,7 +1050,7 @@ function newTile() {
         flash: 0,
         type: type,
         alive: true,
-        held: false
+        selected: false
     }
     return tile;
 }
