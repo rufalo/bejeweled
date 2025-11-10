@@ -30,6 +30,7 @@ var targetRotation = 0;
 var rotationQuarter = 0;
 var rotationStep = 0.12;
 var rotationInProgress = false;
+var pendingRotationDirection = 0;
 
 // Item system
 var inventory = {
@@ -756,9 +757,8 @@ function applyGravity() {
 function drawTile(x, y, highlighted = false){
     let tile = grid[y][x];
     let baseX = x * tileSize + tile.slide.x + tileSize / 2;
-    let baseY = y * tileSize + tile.slide.y + tileSize / 2;
+    let baseY = y * tileSize + tile.slide.y + tileSize / 2 - tile.drop;
     let screenPos = boardToScreen(baseX, baseY);
-    screenPos.y -= tile.drop;
     
     let cornerRadius = tileSize / 8; // Rounded corners
     
@@ -817,6 +817,10 @@ function isMouseInside() {
 }
 
 function mousePressed() {
+    if (rotationInProgress) {
+        return;
+    }
+    
     if (isMouseInside() && !isSwapping && !gameOver) {
         let boardPos = screenToBoard(mouseX, mouseY);
         let x = Math.floor(boardPos.x / tileSize);
@@ -1081,20 +1085,29 @@ function newTile() {
 }
 
 function rotateBoard(direction) {
-    if (rotationInProgress) {
+    if (rotationInProgress || isSwapping || isDestroying || isFalling) {
+        return;
+    }
+    
+    if (direction === 0) {
         return;
     }
     
     rotationInProgress = true;
-    rotationQuarter = (rotationQuarter + direction + 4) % 4;
+    pendingRotationDirection = direction > 0 ? 1 : -1;
+    rotationQuarter = (rotationQuarter + pendingRotationDirection + 4) % 4;
     targetRotation = rotationQuarter * HALF_PI;
 }
 
 function updateRotationAnimation() {
+    if (!rotationInProgress) {
+        return;
+    }
+    
     let diff = angleDifference(targetRotation, currentRotation);
     if (Math.abs(diff) < 0.001) {
         currentRotation = targetRotation;
-        rotationInProgress = false;
+        finalizeBoardRotation();
         return;
     }
     
@@ -1121,6 +1134,101 @@ function wrapAngle(angle) {
         angle -= TWO_PI;
     }
     return angle;
+}
+
+function finalizeBoardRotation() {
+    rotationInProgress = false;
+    
+    if (pendingRotationDirection !== 0) {
+        rotateGridData(pendingRotationDirection);
+    }
+    
+    currentRotation = 0;
+    targetRotation = 0;
+    rotationQuarter = 0;
+    pendingRotationDirection = 0;
+    
+    checkAndDestroyMatches();
+}
+
+function rotateGridData(direction) {
+    if (direction === 0) {
+        return;
+    }
+    
+    let oldWidth = gridSize.x;
+    let oldHeight = gridSize.y;
+    let newWidth = oldHeight;
+    let newHeight = oldWidth;
+    let newGrid = [];
+    
+    for (let y = 0; y < newHeight; y++) {
+        newGrid.push(new Array(newWidth));
+    }
+    
+    for (let y = 0; y < oldHeight; y++) {
+        for (let x = 0; x < oldWidth; x++) {
+            let tile = grid[y][x];
+            tile.slide.x = 0;
+            tile.slide.y = 0;
+            tile.drop = 0;
+            tile.selected = false;
+            
+            let newX, newY;
+            if (direction === 1) {
+                newX = oldHeight - 1 - y;
+                newY = x;
+            } else {
+                newX = y;
+                newY = oldWidth - 1 - x;
+            }
+            
+            newGrid[newY][newX] = tile;
+        }
+    }
+    
+    grid = newGrid;
+    
+    if (oldWidth !== oldHeight) {
+        gridSize.x = newWidth;
+        gridSize.y = newHeight;
+        calculateCanvasSize();
+        resizeCanvas(canvasWidth, canvasHeight);
+    }
+    
+    selectedTile = null;
+    hoverTile = null;
+    lastSwap = null;
+    
+    rotateFloatingTextPositions(direction, oldWidth, oldHeight);
+}
+
+function rotateFloatingTextPositions(direction, width, height) {
+    if (floatingTexts.length === 0) {
+        return;
+    }
+    
+    let boardWidth = width * tileSize;
+    let boardHeight = height * tileSize;
+    let centerX = boardWidth / 2;
+    let centerY = boardHeight / 2;
+    
+    for (let ft of floatingTexts) {
+        let dx = ft.boardX - centerX;
+        let dy = ft.boardY - centerY;
+        let rotatedX, rotatedY;
+        
+        if (direction === 1) {
+            rotatedX = centerX + dy;
+            rotatedY = centerY - dx;
+        } else {
+            rotatedX = centerX - dy;
+            rotatedY = centerY + dx;
+        }
+        
+        ft.boardX = rotatedX;
+        ft.boardY = rotatedY;
+    }
 }
 
 function boardToScreen(x, y) {
