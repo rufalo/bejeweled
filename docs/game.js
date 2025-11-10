@@ -29,6 +29,7 @@ var currentRotation = 0;
 var targetRotation = 0;
 var rotationQuarter = 0;
 var rotationStep = 0.12;
+var rotationInProgress = false;
 
 // Item system
 var inventory = {
@@ -1080,6 +1081,11 @@ function newTile() {
 }
 
 function rotateBoard(direction) {
+    if (rotationInProgress) {
+        return;
+    }
+    
+    rotationInProgress = true;
     rotationQuarter = (rotationQuarter + direction + 4) % 4;
     targetRotation = rotationQuarter * HALF_PI;
 }
@@ -1088,6 +1094,7 @@ function updateRotationAnimation() {
     let diff = angleDifference(targetRotation, currentRotation);
     if (Math.abs(diff) < 0.001) {
         currentRotation = targetRotation;
+        rotationInProgress = false;
         return;
     }
     
