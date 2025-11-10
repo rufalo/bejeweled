@@ -762,9 +762,7 @@ function drawTile(x, y, highlighted = false){
     let cornerRadius = tileSize / 8; // Rounded corners
     
     push();
-    translate(screenPos.x, screenPos.y);
-    rotate(currentRotation);
-    translate(-tileSize / 2, -tileSize / 2);
+    translate(screenPos.x - tileSize / 2, screenPos.y - tileSize / 2);
     
     if (!tile.alive && tile.flash > 0) {
         let scale = tile.flash / (destructionDelay * 2);
