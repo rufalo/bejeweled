@@ -756,9 +756,8 @@ function applyGravity() {
 function drawTile(x, y, highlighted = false){
     let tile = grid[y][x];
     let baseX = x * tileSize + tile.slide.x + tileSize / 2;
-    let baseY = y * tileSize + tile.slide.y + tileSize / 2;
+    let baseY = y * tileSize + tile.slide.y + tileSize / 2 - tile.drop;
     let screenPos = boardToScreen(baseX, baseY);
-    screenPos.y -= tile.drop;
     
     let cornerRadius = tileSize / 8; // Rounded corners
     
