@@ -25,6 +25,10 @@ var lastSwap = null;
 var hoverTile = null;
 var gameOver = false;
 var floatingTexts = [];
+var currentRotation = 0;
+var targetRotation = 0;
+var rotationQuarter = 0;
+var rotationStep = 0.12;
 
 // Item system
 var inventory = {
@@ -54,6 +58,9 @@ function setup() {
     let canvas = createCanvas(canvasWidth, canvasHeight);
     canvas.parent('game-container');
     
+    // Create board control buttons
+    createRotationButtons();
+    
     // Create item buttons
     createItemButtons();
     
@@ -62,6 +69,20 @@ function setup() {
     restartBtn.parent('ui-container');
     restartBtn.mousePressed(restartGame);
     restartBtn.class('restart-btn');
+}
+
+function createRotationButtons() {
+    let rotateLeftBtn = createButton('⟲ Rotate Left');
+    rotateLeftBtn.parent('ui-container');
+    rotateLeftBtn.class('rotate-btn');
+    rotateLeftBtn.attribute('aria-label', 'Rotate board counter-clockwise');
+    rotateLeftBtn.mousePressed(() => rotateBoard(-1));
+    
+    let rotateRightBtn = createButton('Rotate Right ⟳');
+    rotateRightBtn.parent('ui-container');
+    rotateRightBtn.class('rotate-btn');
+    rotateRightBtn.attribute('aria-label', 'Rotate board clockwise');
+    rotateRightBtn.mousePressed(() => rotateBoard(1));
 }
 
 function createItemButtons() {
@@ -202,20 +223,29 @@ function calculateCanvasSize() {
 function draw() {
     background(0);
     
+    updateRotationAnimation();
+    
+    let insideBoard = isMouseInside();
+    
     // Update cursor based on item mode
-    if (itemMode && isMouseInside()) {
+    if (itemMode && insideBoard) {
         cursor('crosshair');
-    } else if (isMouseInside()) {
+    } else if (insideBoard) {
         cursor('pointer');
     } else {
         cursor(ARROW);
     }
     
     // Update hover state
-    if (isMouseInside() && !isSwapping) {
-        let hx = Math.floor(mouseX / tileSize);
-        let hy = Math.floor(mouseY / tileSize);
-        hoverTile = { x: hx, y: hy };
+    if (insideBoard && !isSwapping) {
+        let boardPos = screenToBoard(mouseX, mouseY);
+        let hx = Math.floor(boardPos.x / tileSize);
+        let hy = Math.floor(boardPos.y / tileSize);
+        if (hx >= 0 && hx < gridSize.x && hy >= 0 && hy < gridSize.y) {
+            hoverTile = { x: hx, y: hy };
+        } else {
+            hoverTile = null;
+        }
     } else {
         hoverTile = null;
     }
@@ -299,9 +329,11 @@ function updateFloatingTexts() {
     for (let i = floatingTexts.length - 1; i >= 0; i--) {
         let ft = floatingTexts[i];
         ft.life--;
-        ft.y -= 2; // Float upwards
+        ft.offset += 2; // Float upwards in screen space
         
-        // Draw floating text
+        let screenPos = boardToScreen(ft.boardX, ft.boardY);
+        screenPos.y -= ft.offset;
+        
         push();
         let alpha = map(ft.life, 0, 60, 0, 255);
         fill(255, 255, 255, alpha);
@@ -309,10 +341,9 @@ function updateFloatingTexts() {
         textSize(32);
         stroke(0, 0, 0, alpha);
         strokeWeight(3);
-        text(ft.text, ft.x, ft.y);
+        text(ft.text, screenPos.x, screenPos.y);
         pop();
         
-        // Remove if life is over
         if (ft.life <= 0) {
             floatingTexts.splice(i, 1);
         }
@@ -655,10 +686,11 @@ function checkAndDestroyMatches() {
         
         // Add floating text
         floatingTexts.push({
-            x: avgX,
-            y: avgY,
+            boardX: avgX,
+            boardY: avgY,
             text: "+" + pointsEarned,
-            life: 60
+            life: 60,
+            offset: 0
         });
         
         // Destroy matched tiles with visual effects
@@ -720,28 +752,28 @@ function applyGravity() {
         isFalling = true;
     }
 }
-function drawTile(x,y, highlighted = false){
+function drawTile(x, y, highlighted = false){
     let tile = grid[y][x];
-    let pos = {
-        x:(x * tileSize) + tile.slide.x,
-        y:(y * tileSize) - tile.drop + tile.slide.y
-    };
+    let baseX = x * tileSize + tile.slide.x + tileSize / 2;
+    let baseY = y * tileSize + tile.slide.y + tileSize / 2;
+    let screenPos = boardToScreen(baseX, baseY);
+    screenPos.y -= tile.drop;
     
     let cornerRadius = tileSize / 8; // Rounded corners
     
-    // If tile is being destroyed, shrink it
+    push();
+    translate(screenPos.x, screenPos.y);
+    rotate(currentRotation);
+    translate(-tileSize / 2, -tileSize / 2);
+    
     if (!tile.alive && tile.flash > 0) {
         let scale = tile.flash / (destructionDelay * 2);
         let shrink = (1 - scale) * tileSize / 2;
-        push();
         strokeWeight(4);
         stroke(0);
         fill(TypeColors[tile.type]);
-        rect(pos.x + shrink, pos.y + shrink, tileSize - shrink * 2, tileSize - shrink * 2, cornerRadius);
-        pop();
+        rect(shrink, shrink, tileSize - shrink * 2, tileSize - shrink * 2, cornerRadius);
     } else {
-        push();
-        // Draw tile with border based on selection and hover state
         if (tile.selected) {
             strokeWeight(6);
             stroke(255, 255, 100); // Yellow highlight for selected
@@ -756,50 +788,44 @@ function drawTile(x,y, highlighted = false){
             stroke(40, 40, 40); // Darker border for depth
         }
         
-        // Draw tile with gradient-like effect (inner highlight)
         fill(TypeColors[tile.type]);
-        rect(pos.x, pos.y, tileSize, tileSize, cornerRadius);
+        rect(0, 0, tileSize, tileSize, cornerRadius);
         
-        // Add subtle highlight for 3D effect (brighter if highlighted)
         noStroke();
         if (highlighted) {
             fill(255, 255, 255, 60);
         } else {
             fill(255, 255, 255, 30);
         }
-        rect(pos.x + 2, pos.y + 2, tileSize - 4, tileSize / 2, cornerRadius);
-        pop();
+        rect(2, 2, tileSize - 4, tileSize / 2, cornerRadius);
     }
     
+    pop();
+    
     if (tile.drop > 0) {
-        if (tile.drop < 0) {
-            tile.drop = 0;
-        } else {
-            tile.drop -= dropRate;
-        }
+        tile.drop = Math.max(0, tile.drop - dropRate);
     }
     
     if (tile.flash > 0) {
-        if (tile.flash < 0) {
-            tile.flash = 0;
-        } else {
-            tile.flash -= 1;
-        }
+        tile.flash = Math.max(0, tile.flash - 1);
     }
 }
 
 function isMouseInside() {
-    if (mouseX >= 0 && mouseX < gridSize.x * tileSize &&
-        mouseY >= 0 && mouseY < gridSize.y * tileSize) {
-        return true;
-    }
-    return false;
+    let boardPos = screenToBoard(mouseX, mouseY);
+    return boardPos.x >= 0 && boardPos.x < gridSize.x * tileSize &&
+           boardPos.y >= 0 && boardPos.y < gridSize.y * tileSize;
 }
 
 function mousePressed() {
     if (isMouseInside() && !isSwapping && !gameOver) {
-        let x = Math.floor(mouseX / tileSize);
-        let y = Math.floor(mouseY / tileSize);
+        let boardPos = screenToBoard(mouseX, mouseY);
+        let x = Math.floor(boardPos.x / tileSize);
+        let y = Math.floor(boardPos.y / tileSize);
+        
+        if (x < 0 || x >= gridSize.x || y < 0 || y >= gridSize.y) {
+            return;
+        }
         
         if (itemMode) {
             useItem(x, y);
@@ -1053,4 +1079,69 @@ function newTile() {
         selected: false
     }
     return tile;
+}
+
+function rotateBoard(direction) {
+    rotationQuarter = (rotationQuarter + direction + 4) % 4;
+    targetRotation = rotationQuarter * HALF_PI;
+}
+
+function updateRotationAnimation() {
+    let diff = angleDifference(targetRotation, currentRotation);
+    if (Math.abs(diff) < 0.001) {
+        currentRotation = targetRotation;
+        return;
+    }
+    
+    let step = Math.sign(diff) * Math.min(Math.abs(diff), rotationStep);
+    currentRotation = wrapAngle(currentRotation + step);
+}
+
+function angleDifference(target, current) {
+    let diff = target - current;
+    while (diff > Math.PI) {
+        diff -= TWO_PI;
+    }
+    while (diff < -Math.PI) {
+        diff += TWO_PI;
+    }
+    return diff;
+}
+
+function wrapAngle(angle) {
+    while (angle < 0) {
+        angle += TWO_PI;
+    }
+    while (angle >= TWO_PI) {
+        angle -= TWO_PI;
+    }
+    return angle;
+}
+
+function boardToScreen(x, y) {
+    let centerX = canvasWidth / 2;
+    let centerY = canvasHeight / 2;
+    let dx = x - centerX;
+    let dy = y - centerY;
+    let cosR = Math.cos(currentRotation);
+    let sinR = Math.sin(currentRotation);
+    
+    return {
+        x: dx * cosR - dy * sinR + centerX,
+        y: dx * sinR + dy * cosR + centerY
+    };
+}
+
+function screenToBoard(x, y) {
+    let centerX = canvasWidth / 2;
+    let centerY = canvasHeight / 2;
+    let dx = x - centerX;
+    let dy = y - centerY;
+    let cosR = Math.cos(currentRotation);
+    let sinR = Math.sin(currentRotation);
+    
+    return {
+        x: dx * cosR + dy * sinR + centerX,
+        y: -dx * sinR + dy * cosR + centerY
+    };
 }
