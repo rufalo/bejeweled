@@ -1,6 +1,13 @@
 var grid = [];
 
-var gridSize = { x: 8, y: 8 };
+var gridSize = { x: 9, y: 9 };
+var activeAreaPadding = 1; // Number of empty border cells around the active playfield
+var activeAreaBounds = {
+    minX: activeAreaPadding,
+    maxX: gridSize.x - activeAreaPadding - 1,
+    minY: activeAreaPadding,
+    maxY: gridSize.y - activeAreaPadding - 1
+};
 
 var tileSize = 75;
 
@@ -31,6 +38,8 @@ var rotationQuarter = 0;
 var rotationStep = 0.12;
 var rotationInProgress = false;
 var pendingRotationDirection = 0;
+var refillEnabled = true;
+var refillToggleButton = null;
 
 // Item system
 var inventory = {
@@ -62,6 +71,7 @@ function setup() {
     
     // Create board control buttons
     createRotationButtons();
+    createRefillToggle();
     
     // Create item buttons
     createItemButtons();
@@ -85,6 +95,31 @@ function createRotationButtons() {
     rotateRightBtn.class('rotate-btn');
     rotateRightBtn.attribute('aria-label', 'Rotate board clockwise');
     rotateRightBtn.mousePressed(() => rotateBoard(1));
+}
+
+function createRefillToggle() {
+    refillToggleButton = createButton('');
+    refillToggleButton.parent('ui-container');
+    refillToggleButton.class('refill-btn');
+    refillToggleButton.attribute('aria-label', 'Toggle automatic tile refills');
+    refillToggleButton.mousePressed(() => {
+        refillEnabled = !refillEnabled;
+        updateRefillToggleUI();
+    });
+    updateRefillToggleUI();
+}
+
+function updateRefillToggleUI() {
+    if (!refillToggleButton) {
+        return;
+    }
+    let label = refillEnabled ? 'Refills: ON' : 'Refills: OFF';
+    refillToggleButton.html(label);
+    if (refillEnabled) {
+        refillToggleButton.removeClass('refills-disabled');
+    } else {
+        refillToggleButton.addClass('refills-disabled');
+    }
 }
 
 function createItemButtons() {
@@ -244,7 +279,12 @@ function draw() {
         let hx = Math.floor(boardPos.x / tileSize);
         let hy = Math.floor(boardPos.y / tileSize);
         if (hx >= 0 && hx < gridSize.x && hy >= 0 && hy < gridSize.y) {
-            hoverTile = { x: hx, y: hy };
+            let tile = grid[hy][hx];
+            if (tile && !tile.hole) {
+                hoverTile = { x: hx, y: hy };
+            } else {
+                hoverTile = null;
+            }
         } else {
             hoverTile = null;
         }
@@ -490,6 +530,9 @@ function hasValidMoves() {
     // Check all possible horizontal swaps
     for (let y = 0; y < gridSize.y; y++) {
         for (let x = 0; x < gridSize.x - 1; x++) {
+            if (!isSwapCandidate(x, y) || !isSwapCandidate(x + 1, y)) {
+                continue;
+            }
             if (wouldCreateMatch(x, y, x + 1, y)) {
                 return true;
             }
@@ -499,6 +542,9 @@ function hasValidMoves() {
     // Check all possible vertical swaps
     for (let y = 0; y < gridSize.y - 1; y++) {
         for (let x = 0; x < gridSize.x; x++) {
+            if (!isSwapCandidate(x, y) || !isSwapCandidate(x, y + 1)) {
+                continue;
+            }
             if (wouldCreateMatch(x, y, x, y + 1)) {
                 return true;
             }
@@ -508,7 +554,16 @@ function hasValidMoves() {
     return false;
 }
 
+function isSwapCandidate(x, y) {
+    let tile = grid[y][x];
+    return tile && tile.alive && !tile.hole;
+}
+
 function wouldCreateMatch(x1, y1, x2, y2) {
+    if (!isSwapCandidate(x1, y1) || !isSwapCandidate(x2, y2)) {
+        return false;
+    }
+    
     // Temporarily swap tiles
     let temp = grid[y1][x1];
     grid[y1][x1] = grid[y2][x2];
@@ -532,16 +587,21 @@ function wouldCreateMatch(x1, y1, x2, y2) {
 }
 
 function checkMatchAt(x, y) {
-    let type = grid[y][x].type;
+    let tile = grid[y][x];
+    if (!tile.alive || tile.hole) {
+        return false;
+    }
+    
+    let type = tile.type;
     
     // Check horizontal
     let horizontalCount = 1;
     // Check left
-    for (let i = x - 1; i >= 0 && grid[y][i].alive && grid[y][i].type === type; i--) {
+    for (let i = x - 1; i >= 0 && grid[y][i].alive && !grid[y][i].hole && grid[y][i].type === type; i--) {
         horizontalCount++;
     }
     // Check right
-    for (let i = x + 1; i < gridSize.x && grid[y][i].alive && grid[y][i].type === type; i++) {
+    for (let i = x + 1; i < gridSize.x && grid[y][i].alive && !grid[y][i].hole && grid[y][i].type === type; i++) {
         horizontalCount++;
     }
     if (horizontalCount >= 3) return true;
@@ -549,11 +609,11 @@ function checkMatchAt(x, y) {
     // Check vertical
     let verticalCount = 1;
     // Check up
-    for (let i = y - 1; i >= 0 && grid[i][x].alive && grid[i][x].type === type; i--) {
+    for (let i = y - 1; i >= 0 && grid[i][x].alive && !grid[i][x].hole && grid[i][x].type === type; i--) {
         verticalCount++;
     }
     // Check down
-    for (let i = y + 1; i < gridSize.y && grid[i][x].alive && grid[i][x].type === type; i++) {
+    for (let i = y + 1; i < gridSize.y && grid[i][x].alive && !grid[i][x].hole && grid[i][x].type === type; i++) {
         verticalCount++;
     }
     if (verticalCount >= 3) return true;
@@ -567,14 +627,14 @@ function findMatches() {
     // Check horizontal matches
     for (let y = 0; y < gridSize.y; y++) {
         for (let x = 0; x < gridSize.x - 2; x++) {
-            if (!grid[y][x].alive) continue;
+            if (!grid[y][x].alive || grid[y][x].hole) continue;
             
             let type = grid[y][x].type;
             let matchLength = 1;
             
             // Count consecutive tiles of same type
             for (let i = x + 1; i < gridSize.x; i++) {
-                if (grid[y][i].alive && grid[y][i].type === type) {
+                if (grid[y][i].alive && !grid[y][i].hole && grid[y][i].type === type) {
                     matchLength++;
                 } else {
                     break;
@@ -594,14 +654,14 @@ function findMatches() {
     // Check vertical matches
     for (let x = 0; x < gridSize.x; x++) {
         for (let y = 0; y < gridSize.y - 2; y++) {
-            if (!grid[y][x].alive) continue;
+            if (!grid[y][x].alive || grid[y][x].hole) continue;
             
             let type = grid[y][x].type;
             let matchLength = 1;
             
             // Count consecutive tiles of same type
             for (let i = y + 1; i < gridSize.y; i++) {
-                if (grid[i][x].alive && grid[i][x].type === type) {
+                if (grid[i][x].alive && !grid[i][x].hole && grid[i][x].type === type) {
                     matchLength++;
                 } else {
                     break;
@@ -699,6 +759,7 @@ function checkAndDestroyMatches() {
         for (let match of matches) {
             grid[match.y][match.x].alive = false;
             grid[match.y][match.x].flash = destructionDelay * 2;
+            grid[match.y][match.x].selected = false;
         }
         
         // Set destruction state
@@ -714,35 +775,46 @@ function applyGravity() {
     for (let x = 0; x < gridSize.x; x++) {
         // Start from bottom and work up
         for (let y = gridSize.y - 1; y >= 0; y--) {
-            if (!grid[y][x].alive) {
-                // Find the next alive tile above
-                for (let checkY = y - 1; checkY >= 0; checkY--) {
-                    if (grid[checkY][x].alive) {
-                        // Move this tile down
-                        grid[y][x] = grid[checkY][x];
-                        grid[checkY][x] = newTile();
-                        grid[checkY][x].alive = false;
-                        
-                        // Set drop animation
-                        let dropDistance = (y - checkY) * tileSize;
-                        grid[y][x].drop = dropDistance;
-                        
-                        tilesDropped = true;
-                        break;
-                    }
+            let cell = grid[y][x];
+            if (cell.hole || cell.alive) {
+                continue;
+            }
+            
+            // Find the next alive tile above
+            for (let checkY = y - 1; checkY >= 0; checkY--) {
+                let above = grid[checkY][x];
+                if (above.hole) {
+                    continue;
+                }
+                
+                if (above.alive) {
+                    grid[y][x] = above;
+                    grid[checkY][x] = createEmptyTile();
+                    
+                    // Reset movement state and set drop animation
+                    grid[y][x].slide.x = 0;
+                    grid[y][x].slide.y = 0;
+                    let dropDistance = (y - checkY) * tileSize;
+                    grid[y][x].drop = dropDistance;
+                    grid[y][x].selected = false;
+                    
+                    tilesDropped = true;
+                    break;
                 }
             }
         }
     }
     
-    // Spawn new tiles at the top to fill empty spaces
-    for (let x = 0; x < gridSize.x; x++) {
-        for (let y = 0; y < gridSize.y; y++) {
-            if (!grid[y][x].alive) {
-                grid[y][x] = newTile();
-                grid[y][x].alive = true;
+    // Spawn new tiles at the top to fill empty spaces if refills are enabled
+    if (refillEnabled) {
+        for (let x = 0; x < gridSize.x; x++) {
+            for (let y = 0; y < gridSize.y; y++) {
+                let cell = grid[y][x];
+                if (cell.hole || cell.alive) {
+                    continue;
+                }
                 
-                // Set drop animation from above the screen
+                grid[y][x] = newTile();
                 grid[y][x].drop = (y + 1) * tileSize;
                 tilesDropped = true;
             }
@@ -752,8 +824,11 @@ function applyGravity() {
     // After gravity and spawning, set falling state to check for cascades
     if (tilesDropped) {
         isFalling = true;
+    } else {
+        checkForCascades();
     }
 }
+
 function drawTile(x, y, highlighted = false){
     let tile = grid[y][x];
     let baseX = x * tileSize + tile.slide.x + tileSize / 2;
@@ -765,13 +840,23 @@ function drawTile(x, y, highlighted = false){
     push();
     translate(screenPos.x - tileSize / 2, screenPos.y - tileSize / 2);
     
-    if (!tile.alive && tile.flash > 0) {
+    if (tile.hole) {
+        strokeWeight(2);
+        stroke(30, 30, 30);
+        fill(10, 10, 10);
+        rect(0, 0, tileSize, tileSize, cornerRadius);
+    } else if (!tile.alive && tile.flash > 0) {
         let scale = tile.flash / (destructionDelay * 2);
         let shrink = (1 - scale) * tileSize / 2;
         strokeWeight(4);
         stroke(0);
         fill(TypeColors[tile.type]);
         rect(shrink, shrink, tileSize - shrink * 2, tileSize - shrink * 2, cornerRadius);
+    } else if (!tile.alive) {
+        strokeWeight(2);
+        stroke(40, 40, 40);
+        fill(20, 20, 20);
+        rect(0, 0, tileSize, tileSize, cornerRadius);
     } else {
         if (tile.selected) {
             strokeWeight(6);
@@ -801,7 +886,7 @@ function drawTile(x, y, highlighted = false){
     
     pop();
     
-    if (tile.drop > 0) {
+    if (!tile.hole && tile.drop > 0) {
         tile.drop = Math.max(0, tile.drop - dropRate);
     }
     
@@ -827,6 +912,11 @@ function mousePressed() {
         let y = Math.floor(boardPos.y / tileSize);
         
         if (x < 0 || x >= gridSize.x || y < 0 || y >= gridSize.y) {
+            return;
+        }
+        
+        let targetTile = grid[y][x];
+        if (!targetTile || targetTile.hole) {
             return;
         }
         
@@ -887,9 +977,18 @@ function useItem(x, y) {
 
 function useHammer(x, y) {
     // Eliminate the clicked tile
-    if (grid[y][x].alive) {
-        grid[y][x].alive = false;
-        grid[y][x].flash = destructionDelay * 2;
+    let tile = grid[y][x];
+    if (tile.hole) {
+        return;
+    }
+    
+    if (tile.alive) {
+        tile.alive = false;
+        tile.flash = destructionDelay * 2;
+        tile.selected = false;
+        if (selectedTile && selectedTile.x === x && selectedTile.y === y) {
+            selectedTile = null;
+        }
         
         // Start destruction sequence which will trigger gravity
         isDestroying = true;
@@ -904,23 +1003,23 @@ function useRandomizer(x, y) {
     let emptyInCol = 0;
     
     for (let i = 0; i < gridSize.x; i++) {
-        if (!grid[y][i].alive) emptyInRow++;
+        if (!grid[y][i].hole && !grid[y][i].alive) emptyInRow++;
     }
     for (let i = 0; i < gridSize.y; i++) {
-        if (!grid[i][x].alive) emptyInCol++;
+        if (!grid[i][x].hole && !grid[i][x].alive) emptyInCol++;
     }
     
     if (emptyInRow >= emptyInCol) {
         // Randomize the row
         for (let i = 0; i < gridSize.x; i++) {
-            if (grid[y][i].alive) {
+            if (grid[y][i].alive && !grid[y][i].hole) {
                 grid[y][i].type = Math.floor(Math.random() * TypeColors.length);
             }
         }
     } else {
         // Randomize the column
         for (let i = 0; i < gridSize.y; i++) {
-            if (grid[i][x].alive) {
+            if (grid[i][x].alive && !grid[i][x].hole) {
                 grid[i][x].type = Math.floor(Math.random() * TypeColors.length);
             }
         }
@@ -943,23 +1042,23 @@ function useCycler(x, y) {
     let emptyInCol = 0;
     
     for (let i = 0; i < gridSize.x; i++) {
-        if (!grid[y][i].alive) emptyInRow++;
+        if (!grid[y][i].hole && !grid[y][i].alive) emptyInRow++;
     }
     for (let i = 0; i < gridSize.y; i++) {
-        if (!grid[i][x].alive) emptyInCol++;
+        if (!grid[i][x].hole && !grid[i][x].alive) emptyInCol++;
     }
     
     if (emptyInRow >= emptyInCol) {
         // Cycle the row
         for (let i = 0; i < gridSize.x; i++) {
-            if (grid[y][i].alive) {
+            if (grid[y][i].alive && !grid[y][i].hole) {
                 grid[y][i].type = (grid[y][i].type + 1) % TypeColors.length;
             }
         }
     } else {
         // Cycle the column
         for (let i = 0; i < gridSize.y; i++) {
-            if (grid[i][x].alive) {
+            if (grid[i][x].alive && !grid[i][x].hole) {
                 grid[i][x].type = (grid[i][x].type + 1) % TypeColors.length;
             }
         }
@@ -975,6 +1074,11 @@ function useCycler(x, y) {
 }
 
 function handleTileClick(x, y) {
+    let tile = grid[y][x];
+    if (!tile.alive || tile.hole) {
+        return;
+    }
+    
     if (selectedTile === null) {
         // Select first tile
         selectedTile = { x: x, y: y };
@@ -1003,6 +1107,13 @@ function areAdjacent(tile1, tile2) {
 }
 
 function swapTiles(tile1Pos, tile2Pos) {
+    let tile1 = grid[tile1Pos.y][tile1Pos.x];
+    let tile2 = grid[tile2Pos.y][tile2Pos.x];
+    
+    if (!tile1.alive || tile1.hole || !tile2.alive || tile2.hole) {
+        return;
+    }
+    
     isSwapping = true;
     
     // Store swap for potential revert
@@ -1023,11 +1134,21 @@ function swapTiles(tile1Pos, tile2Pos) {
     grid[tile2Pos.y][tile2Pos.x].slide.y = -dy;
 }
 
+function isActiveCell(x, y) {
+    return x >= activeAreaBounds.minX && x <= activeAreaBounds.maxX &&
+           y >= activeAreaBounds.minY && y <= activeAreaBounds.maxY;
+}
+
 function createGrid() {
+    grid = [];
     for (let y = 0; y < gridSize.y; y++) {
         grid.push([]);
         for (let x = 0; x < gridSize.x; x++) {
-            grid[y].push(newTileNoMatch(x, y));
+            if (isActiveCell(x, y)) {
+                grid[y].push(newTileNoMatch(x, y));
+            } else {
+                grid[y].push(newHoleTile());
+            }
         }
     }
 }
@@ -1043,7 +1164,9 @@ function newTileNoMatch(x, y) {
         // Check if this tile would create a horizontal match
         let horizontalMatch = false;
         if (x >= 2) {
-            if (grid[y][x-1].type === tile.type && grid[y][x-2].type === tile.type) {
+            let left1 = grid[y][x-1];
+            let left2 = grid[y][x-2];
+            if (left1 && left2 && left1.alive && left2.alive && left1.type === tile.type && left2.type === tile.type) {
                 horizontalMatch = true;
             }
         }
@@ -1051,7 +1174,9 @@ function newTileNoMatch(x, y) {
         // Check if this tile would create a vertical match
         let verticalMatch = false;
         if (y >= 2) {
-            if (grid[y-1][x].type === tile.type && grid[y-2][x].type === tile.type) {
+            let up1 = grid[y-1][x];
+            let up2 = grid[y-2][x];
+            if (up1 && up2 && up1.alive && up2.alive && up1.type === tile.type && up2.type === tile.type) {
                 verticalMatch = true;
             }
         }
@@ -1068,8 +1193,7 @@ function newTileNoMatch(x, y) {
     return tile;
 }
 
-function newTile() {
-    let type = Math.floor(Math.random() * TypeColors.length);
+function createBaseTile(overrides = {}) {
     let tile = {
         slide: {
             x: 0,
@@ -1077,11 +1201,27 @@ function newTile() {
         },
         drop: 0,
         flash: 0,
-        type: type,
-        alive: true,
-        selected: false
-    }
-    return tile;
+        type: null,
+        alive: false,
+        selected: false,
+        hole: false
+    };
+    return Object.assign(tile, overrides);
+}
+
+function createEmptyTile() {
+    return createBaseTile();
+}
+
+function newHoleTile() {
+    return createBaseTile({ hole: true });
+}
+
+function newTile() {
+    return createBaseTile({
+        type: Math.floor(Math.random() * TypeColors.length),
+        alive: true
+    });
 }
 
 function rotateBoard(direction) {
