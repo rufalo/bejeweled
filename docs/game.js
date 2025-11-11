@@ -38,8 +38,8 @@ var rotationQuarter = 0;
 var rotationStep = 0.12;
 var rotationInProgress = false;
 var pendingRotationDirection = 0;
-var refillEnabled = true;
-var refillToggleButton = null;
+var newTileSpawnEnabled = true;
+var spawnToggleButton = null;
 
 // Item system
 var inventory = {
@@ -71,7 +71,7 @@ function setup() {
     
     // Create board control buttons
     createRotationButtons();
-    createRefillToggle();
+    createSpawnToggle();
     
     // Create item buttons
     createItemButtons();
@@ -97,28 +97,28 @@ function createRotationButtons() {
     rotateRightBtn.mousePressed(() => rotateBoard(1));
 }
 
-function createRefillToggle() {
-    refillToggleButton = createButton('');
-    refillToggleButton.parent('ui-container');
-    refillToggleButton.class('refill-btn');
-    refillToggleButton.attribute('aria-label', 'Toggle automatic tile refills');
-    refillToggleButton.mousePressed(() => {
-        refillEnabled = !refillEnabled;
-        updateRefillToggleUI();
+function createSpawnToggle() {
+    spawnToggleButton = createButton('');
+    spawnToggleButton.parent('ui-container');
+    spawnToggleButton.class('spawn-btn');
+    spawnToggleButton.attribute('aria-label', 'Toggle spawning of new tiles');
+    spawnToggleButton.mousePressed(() => {
+        newTileSpawnEnabled = !newTileSpawnEnabled;
+        updateSpawnToggleUI();
     });
-    updateRefillToggleUI();
+    updateSpawnToggleUI();
 }
 
-function updateRefillToggleUI() {
-    if (!refillToggleButton) {
+function updateSpawnToggleUI() {
+    if (!spawnToggleButton) {
         return;
     }
-    let label = refillEnabled ? 'Refills: ON' : 'Refills: OFF';
-    refillToggleButton.html(label);
-    if (refillEnabled) {
-        refillToggleButton.removeClass('refills-disabled');
+    let label = newTileSpawnEnabled ? 'New Tiles: ON' : 'New Tiles: OFF';
+    spawnToggleButton.html(label);
+    if (newTileSpawnEnabled) {
+        spawnToggleButton.removeClass('spawn-disabled');
     } else {
-        refillToggleButton.addClass('refills-disabled');
+        spawnToggleButton.addClass('spawn-disabled');
     }
 }
 
@@ -238,6 +238,8 @@ function restartGame() {
     // Clear and recreate grid
     grid = [];
     createGrid();
+    
+    updateSpawnToggleUI();
 }
 
 function calculateCanvasSize() {
@@ -261,6 +263,8 @@ function draw() {
     background(0);
     
     updateRotationAnimation();
+    
+    drawBoardBackground();
     
     let insideBoard = isMouseInside();
     
@@ -332,6 +336,8 @@ function draw() {
         }
     }
     
+    drawBoardBorder();
+    
     // Update and draw floating texts
     updateFloatingTexts();
     
@@ -398,6 +404,29 @@ function drawCascadeMultiplier() {
     textAlign(CENTER, CENTER);
     textSize(48);
     text(cascadeMultiplier + "x COMBO!", canvasWidth / 2, 50);
+    pop();
+}
+
+function drawBoardBackground() {
+    push();
+    translate(canvasWidth / 2, canvasHeight / 2);
+    rotate(currentRotation);
+    translate(-canvasWidth / 2, -canvasHeight / 2);
+    noStroke();
+    fill(18, 18, 28);
+    rect(0, 0, gridSize.x * tileSize, gridSize.y * tileSize, tileSize / 4);
+    pop();
+}
+
+function drawBoardBorder() {
+    push();
+    translate(canvasWidth / 2, canvasHeight / 2);
+    rotate(currentRotation);
+    translate(-canvasWidth / 2, -canvasHeight / 2);
+    noFill();
+    stroke(120, 120, 140);
+    strokeWeight(3);
+    rect(0, 0, gridSize.x * tileSize, gridSize.y * tileSize);
     pop();
 }
 
@@ -805,8 +834,8 @@ function applyGravity() {
         }
     }
     
-    // Spawn new tiles at the top to fill empty spaces if refills are enabled
-    if (refillEnabled) {
+    // Spawn new tiles at the top to fill empty spaces if spawning is enabled
+    if (newTileSpawnEnabled) {
         for (let x = 0; x < gridSize.x; x++) {
             for (let y = 0; y < gridSize.y; y++) {
                 let cell = grid[y][x];
@@ -842,9 +871,15 @@ function drawTile(x, y, highlighted = false){
     
     if (tile.hole) {
         strokeWeight(2);
-        stroke(30, 30, 30);
-        fill(10, 10, 10);
+        stroke(80, 80, 90);
+        fill(22, 22, 32);
         rect(0, 0, tileSize, tileSize, cornerRadius);
+        
+        let diagMargin = tileSize * 0.2;
+        stroke(60, 60, 72);
+        strokeWeight(1.5);
+        line(diagMargin, diagMargin, tileSize - diagMargin, tileSize - diagMargin);
+        line(diagMargin, tileSize - diagMargin, tileSize - diagMargin, diagMargin);
     } else if (!tile.alive && tile.flash > 0) {
         let scale = tile.flash / (destructionDelay * 2);
         let shrink = (1 - scale) * tileSize / 2;
