@@ -31,6 +31,7 @@ var rotationQuarter = 0;
 var rotationStep = 0.12;
 var rotationInProgress = false;
 var pendingRotationDirection = 0;
+var pendingGridState = null;
 
 // Item system
 var inventory = {
@@ -1093,8 +1094,15 @@ function rotateBoard(direction) {
         return;
     }
     
+    let desiredDirection = direction > 0 ? 1 : -1;
+    let preparedState = prepareGridRotation(desiredDirection);
+    if (!preparedState) {
+        return;
+    }
+    
     rotationInProgress = true;
-    pendingRotationDirection = direction > 0 ? 1 : -1;
+    pendingRotationDirection = desiredDirection;
+    pendingGridState = preparedState;
     rotationQuarter = (rotationQuarter + pendingRotationDirection + 4) % 4;
     targetRotation = rotationQuarter * HALF_PI;
 }
@@ -1140,7 +1148,7 @@ function finalizeBoardRotation() {
     rotationInProgress = false;
     
     if (pendingRotationDirection !== 0) {
-        rotateGridData(pendingRotationDirection);
+        applyPendingGridRotation();
     }
     
     currentRotation = 0;
@@ -1151,9 +1159,9 @@ function finalizeBoardRotation() {
     checkAndDestroyMatches();
 }
 
-function rotateGridData(direction) {
+function prepareGridRotation(direction) {
     if (direction === 0) {
-        return;
+        return null;
     }
     
     let oldWidth = gridSize.x;
@@ -1169,11 +1177,6 @@ function rotateGridData(direction) {
     for (let y = 0; y < oldHeight; y++) {
         for (let x = 0; x < oldWidth; x++) {
             let tile = grid[y][x];
-            tile.slide.x = 0;
-            tile.slide.y = 0;
-            tile.drop = 0;
-            tile.selected = false;
-            
             let newX, newY;
             if (direction === 1) {
                 newX = oldHeight - 1 - y;
@@ -1187,11 +1190,40 @@ function rotateGridData(direction) {
         }
     }
     
-    grid = newGrid;
+    return {
+        grid: newGrid,
+        oldWidth: oldWidth,
+        oldHeight: oldHeight,
+        newWidth: newWidth,
+        newHeight: newHeight,
+        direction: direction
+    };
+}
+
+function applyPendingGridRotation() {
+    if (!pendingGridState) {
+        return;
+    }
     
-    if (oldWidth !== oldHeight) {
-        gridSize.x = newWidth;
-        gridSize.y = newHeight;
+    let rotatedGrid = pendingGridState.grid;
+    
+    for (let y = 0; y < pendingGridState.newHeight; y++) {
+        for (let x = 0; x < pendingGridState.newWidth; x++) {
+            let tile = rotatedGrid[y][x];
+            tile.slide.x = 0;
+            tile.slide.y = 0;
+            tile.drop = 0;
+            tile.selected = false;
+        }
+    }
+    
+    grid = rotatedGrid;
+    
+    let sizeChanged = gridSize.x !== pendingGridState.newWidth || gridSize.y !== pendingGridState.newHeight;
+    gridSize.x = pendingGridState.newWidth;
+    gridSize.y = pendingGridState.newHeight;
+    
+    if (sizeChanged) {
         calculateCanvasSize();
         resizeCanvas(canvasWidth, canvasHeight);
     }
@@ -1200,7 +1232,9 @@ function rotateGridData(direction) {
     hoverTile = null;
     lastSwap = null;
     
-    rotateFloatingTextPositions(direction, oldWidth, oldHeight);
+    rotateFloatingTextPositions(pendingGridState.direction, pendingGridState.oldWidth, pendingGridState.oldHeight);
+    
+    pendingGridState = null;
 }
 
 function rotateFloatingTextPositions(direction, width, height) {
