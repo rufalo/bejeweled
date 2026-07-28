@@ -39,6 +39,6 @@ export function drawParticles(p5, sys) {
   for (const p of sys.particles) {
     const a = Math.floor((p.life / p.maxLife) * 220);
     p5.fill(p.r, p.g, p.b, a);
-    p5.circle(p.x, p.y, p.size);
+    p5.ellipse(p.x, p.y, p.size, p.size);
   }
 }

@@ -508,7 +508,7 @@ function cycleLine(game, cell) {
 
 export function drawFrame(game) {
   const p5 = game.p5;
-  p5.clear();
+  p5.background(0, 0);
 
   updateRotation(game);
   tickMotion(game.grid, game.cols, game.rows, TIMING.dropSpeed, TIMING.swapSpeed);

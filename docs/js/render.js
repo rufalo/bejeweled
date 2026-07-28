@@ -89,7 +89,7 @@ function drawShape(p5, shape, cx, cy, size) {
   const r = size / 2;
   p5.beginShape();
   if (shape === 'circle') {
-    p5.circle(cx, cy, size);
+    p5.ellipse(cx, cy, size, size);
     return;
   }
   if (shape === 'square') {
@@ -130,7 +130,7 @@ function drawShape(p5, shape, cx, cy, size) {
     p5.endShape(p5.CLOSE);
     return;
   }
-  p5.circle(cx, cy, size);
+  p5.ellipse(cx, cy, size, size);
 }
 
 function drawRocketBadge(p5, cx, cy, size, alpha) {
@@ -141,7 +141,7 @@ function drawRocketBadge(p5, cx, cy, size, alpha) {
   p5.line(cx, cy - size * 0.28, cx, cy + size * 0.28);
   p5.noStroke();
   p5.fill(255, 255, 255, alpha);
-  p5.circle(cx, cy, size * 0.18);
+  p5.ellipse(cx, cy, size * 0.18, size * 0.18);
   p5.pop();
 }
 
@@ -150,10 +150,10 @@ function drawBombBadge(p5, cx, cy, size, alpha) {
   p5.noFill();
   p5.stroke(255, 255, 255, alpha);
   p5.strokeWeight(Math.max(2, size * 0.07));
-  p5.circle(cx, cy, size * 0.42);
+  p5.ellipse(cx, cy, size * 0.42, size * 0.42);
   p5.noStroke();
   p5.fill(255, 255, 255, alpha);
-  p5.circle(cx, cy, size * 0.14);
+  p5.ellipse(cx, cy, size * 0.14, size * 0.14);
   p5.pop();
 }
 
