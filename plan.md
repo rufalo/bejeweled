@@ -1,47 +1,106 @@
-# Match Three Improvement Plan
+# Jewel Cascade — Remake Plan
 
 ## Vision
-- Keep the “neon arcade” match-three feel while remaining a 100% static project: open `docs/index.html` in any modern browser and play.
-- Use only plain JavaScript, HTML, CSS, and assets inside `docs/`; no Node.js, bundlers, build steps, or server dependencies.
+Turn the existing Bejeweled-style prototype into a polished, **mobile-first** match-three that deploys on GitHub Pages with zero build steps. Keep neon arcade energy, but make phones the primary target: swipe to swap, thumb-zone controls, and a single-screen layout that never requires scrolling.
 
-## Constraints & Principles
-- Structure code with simple ES modules or script tags that the browser can load directly from `docs/`.
-- Avoid any tooling that requires installation (Node.js, npm, yarn, CLI generators, etc.).
-- Prefer manual asset management and hand-written documentation over automated pipelines.
-- Keep the repo friendly for GitHub Pages and local file browsing; optionally allow `python3 -m http.server` for testing but do not rely on it.
+## Non-negotiables
+- Static only: HTML / CSS / JS under `docs/` (GitHub Pages root).
+- No Node, npm, bundlers, or backend.
+- ES modules loaded by the browser; serve via GitHub Pages or `python3 -m http.server`.
+- Keep p5.js for canvas rendering (already vendored).
+- Works offline after first load (localStorage only).
 
-## Phase 1 – Core Cleanup
-- Break `docs/game.js` into small modules (e.g., `docs/js/state.js`, `docs/js/grid.js`, `docs/js/ui.js`) and wire them with `<script type="module">`.
-- Replace global state mutations with explicit module exports/imports and a lightweight pub/sub helper implemented manually.
-- Add deterministic seeding helpers so the current plain JS code can recreate the same boards when needed.
-- Create a short manual test checklist (board loads, swapping works, matches resolve, score updates) and store it in `README.md`.
+## Current gaps
+| Area | Problem |
+|------|---------|
+| Controls | Click-select then click-adjacent; no swipe; awkward on phones |
+| Layout | Buttons below canvas; UI overflows small viewports |
+| Touch | No `touch-action` / gesture handling; hover-centric feedback |
+| Depth | No special gems from 4+/5 matches |
+| Feedback | Flat colored squares; weak audio/particles |
+| Structure | Monolithic `game.js` (~1.2k lines) |
 
-## Phase 2 – Gameplay Depth
-- Rebalance scoring: clarify combo tiers, move efficiency bonuses, and streak multipliers; surface numbers directly in the HUD.
-- Introduce special tiles (line clears, bombs, color changers) using simple factory functions and data tables stored in plain JSON files under `docs/data/`.
-- Expand inventory/boosters by extending the existing state modules; persist progress with vanilla `localStorage`.
-- Add themed gem sets and backdrop animations using CSS classes and pre-rendered assets (no runtime asset pipeline).
+## Architecture
+```
+docs/
+  index.html          # shell + HUD markup
+  css/game.css        # mobile-first layout + theme
+  js/
+    main.js           # p5 bridge (setup/draw/input)
+    game.js           # state machine / loop orchestration
+    config.js         # sizes, scoring, colors, timings
+    board.js          # grid, gravity, spawn, rotation
+    match.js          # match find, valid moves, hints
+    specials.js       # rockets, bombs, activation
+    input.js          # swipe + tap (touch & mouse)
+    render.js         # gem shapes, highlights, FX draw
+    particles.js      # burst particles
+    audio.js          # Web Audio SFX (no asset files)
+    ui.js             # HUD, overlays, button wiring
+    storage.js        # high score / settings
+  p5.min.js
+```
 
-## Phase 3 – Progression & UX
-- Build level goals (score targets, blockers, rescue items) with configuration files that the game loads via `fetch` from `docs/data/`.
-- Implement a basic profile screen that reads/writes JSON in `localStorage`; include schema migration helpers in plain JS.
-- Improve responsiveness and accessibility using CSS media queries, optional reduced-motion toggles, and keyboard-only controls.
-- Hook in `p5.sound` directly from `docs/addons/` and provide a simple audio settings overlay.
+## Feature set (this remake)
 
-## Phase 4 – Community & Polish
-- Ship daily/weekly seeded challenges by rotating the deterministic seed list; share codes via plain text copy buttons.
-- Offer an optional manual leaderboard export/import (e.g., download/upload JSON) instead of an online backend.
-- Add screenshot helpers using `canvas.toDataURL()` and simple share instructions in the UI.
-- Optimize performance with selective redraws, sprite atlases prepared manually, and documented testing steps.
+### Core gameplay
+- 8×8 board, 6 gem types with distinct shapes (colorblind-friendly).
+- Match 3+ clears; cascades with rising combo multiplier.
+- Invalid swaps animate back.
+- Board rotation (kept as optional power move).
+- Game over when no valid swaps remain.
 
-## Manual Workflow
-- Edit files directly under `docs/`; when module splitting is necessary, keep relative paths simple and update the HTML manually.
-- Test changes by opening `docs/index.html` in the browser (double-click or drag into the window); optionally run `python3 -m http.server` when a local host is required.
-- When committing, include updated assets and note any manual steps taken (e.g., how sprites were exported).
-- Track issues and feature ideas in `README.md` or GitHub Issues—no automated project boards needed.
+### Specials
+- **Match 4** → Rocket (clears full row *or* column on activate).
+- **Match 5+** → Bomb (clears 3×3 when matched/activated).
+- Matching a special activates it; specials can chain.
 
-## Immediate Next Steps
-- Sketch the desired module layout inside `docs/js/` and create placeholder files without introducing any build tooling.
-- Document the manual test checklist and seed/testing instructions in `README.md`.
-- Audit existing assets in `docs/` and list replacements or new art/audio pieces needed for the neon arcade theme.
-- Draft a lightweight roadmap for implementing level goals and special tiles within the current static setup.
+### Boosters (earned from color clears)
+- Hammer — destroy one gem.
+- Scramble — reshuffle a row or column.
+- Cycle — shift colors along a row or column.
+
+### Mobile controls
+- **Swipe** adjacent gems to swap (primary).
+- Tap-select still supported.
+- Large bottom toolbar for boosters / hint / rotate / restart.
+- `touch-action: none`, no page scroll/zoom while playing.
+- Dynamic board sizing with safe-area insets.
+
+### Juice & UX
+- Particle bursts + floating score text.
+- Combo banner.
+- Hint pulse (highlights one valid move).
+- Web Audio blips (match, swap, special, game over).
+- Mute toggle; volume persisted.
+- Start splash + game-over overlay (HTML, not canvas text).
+
+### Persistence
+- High score, mute preference, best combo via `localStorage`.
+
+## Phased delivery
+1. **Shell + modules** — new HTML/CSS, module skeleton, config.
+2. **Playable core** — board, match, gravity, cascades, scoring.
+3. **Mobile input** — swipe/tap, responsive canvas, thumb UI.
+4. **Specials + boosters** — rockets/bombs + inventory tools.
+5. **Polish** — particles, audio, hints, overlays, README.
+
+## Manual test checklist
+- [ ] Board fills with no initial matches
+- [ ] Swipe swaps adjacent gems on phone-sized viewport
+- [ ] Tap-select + tap-adjacent still works
+- [ ] Matches clear, gems fall, cascades score with combo
+- [ ] Match-4 creates rocket; activating clears line
+- [ ] Match-5 creates bomb; activating clears neighborhood
+- [ ] Boosters enable/disable correctly; cancel works
+- [ ] Hint highlights a real move
+- [ ] Rotate works without breaking touch mapping
+- [ ] Mute persists; high score updates
+- [ ] Game over overlay + restart
+- [ ] No vertical page scroll while dragging on board
+- [ ] GitHub Pages path works (`/bejeweled/` or `/docs/` locally)
+
+## Out of scope (later)
+- Online leaderboards, accounts, ads
+- Bundlers / TypeScript / frameworks
+- Level campaign / blockers (can follow as data-driven JSON under `docs/data/`)
