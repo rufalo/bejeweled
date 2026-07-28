@@ -42,6 +42,7 @@ export const STORAGE_KEYS = {
   highScore: 'jewelCascade.highScore',
   bestCombo: 'jewelCascade.bestCombo',
   muted: 'jewelCascade.muted',
+  profile: 'jewelCascade.rogueProfile',
 };
 
 export const SWIPE_THRESHOLD = 24; // px before a drag counts as swipe

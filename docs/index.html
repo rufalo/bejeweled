@@ -28,14 +28,26 @@
             Sound On
           </button>
         </div>
+        <div class="xp-bar" aria-label="Experience">
+          <div class="xp-track"><div id="xp-fill" class="xp-fill"></div></div>
+          <div id="xp-label" class="xp-label">Lvl 1 · 0/80 XP</div>
+        </div>
         <div class="hud" aria-live="polite">
           <div class="stat">
             <span class="stat-label">Score</span>
             <span class="stat-value" id="score-value">0</span>
           </div>
           <div class="stat">
-            <span class="stat-label">Moves</span>
+            <span class="stat-label" id="moves-label">Left</span>
             <span class="stat-value" id="moves-value">0</span>
+          </div>
+          <div class="stat" id="depth-stat">
+            <span class="stat-label">Floor</span>
+            <span class="stat-value" id="depth-value">1</span>
+          </div>
+          <div class="stat" id="goal-stat">
+            <span class="stat-label">Goal</span>
+            <span class="stat-value" id="goal-value">0/0</span>
           </div>
           <div class="stat">
             <span class="stat-label">Best</span>
@@ -72,27 +84,60 @@
           <button id="btn-hint" class="action-btn" type="button">Hint</button>
           <button id="btn-rotate-l" class="action-btn" type="button">⟲ Left</button>
           <button id="btn-rotate-r" class="action-btn" type="button">Right ⟳</button>
-          <button id="btn-restart" class="action-btn danger" type="button">Restart</button>
+          <button id="btn-restart" class="action-btn danger" type="button">Menu</button>
           <button id="btn-cancel" class="action-btn cancel" type="button">Cancel booster</button>
         </div>
-        <p class="hint-line">Swipe gems to swap · Match 4 for rockets · Match 5 for bombs</p>
+        <p class="hint-line">Rogue: clear the goal before moves run out · pick perks · level up</p>
       </footer>
     </div>
 
     <div id="start-overlay" class="overlay">
-      <div class="overlay-card">
+      <div class="overlay-card start-card">
         <h1>Jewel Cascade</h1>
-        <p>
-          Swipe to swap. Chain cascades for combos. Match four for a rocket, five for a bomb.
-          Built for phones — play with your thumbs.
+        <p class="tagline">
+          Descend floors with limited moves. Earn XP, level up, and stack perks.
         </p>
-        <button id="btn-play" class="primary" type="button">Play</button>
+        <div class="profile-chip">
+          <div><span>Level</span><strong id="start-level">1</strong></div>
+          <div><span>Progress</span><strong id="start-xp">0 / 80 XP</strong></div>
+          <div><span>Best floor</span><strong id="start-best-depth">0</strong></div>
+        </div>
+        <p id="start-meta" class="meta-line">No permanent perks yet</p>
+
+        <div class="mode-block">
+          <h3>Rogue descent</h3>
+          <div class="diff-grid">
+            <button id="btn-diff-normal" class="diff-btn selected" type="button" data-diff="normal">
+              <strong>Normal</strong>
+              <small>25 moves · fair goals</small>
+            </button>
+            <button id="btn-diff-hard" class="diff-btn" type="button" data-diff="hard">
+              <strong>Hard</strong>
+              <small>20 moves · +35% XP</small>
+            </button>
+            <button id="btn-diff-brutal" class="diff-btn" type="button" data-diff="brutal">
+              <strong>Brutal</strong>
+              <small>16 moves · +75% XP</small>
+            </button>
+          </div>
+        </div>
+
+        <button id="btn-play-zen" class="ghost" type="button">Zen mode (endless)</button>
+      </div>
+    </div>
+
+    <div id="perk-overlay" class="overlay hidden">
+      <div class="overlay-card perk-card-wrap">
+        <h2 id="perk-title">Choose a perk</h2>
+        <p id="perk-subtitle">Pick one</p>
+        <div id="perk-choices" class="perk-choices"></div>
       </div>
     </div>
 
     <div id="gameover-overlay" class="overlay hidden">
       <div class="overlay-card">
-        <h2>No moves left</h2>
+        <h2 id="over-title">Run over</h2>
+        <p id="over-reason" class="over-reason"></p>
         <div class="over-stats">
           <div>
             <span>Score</span>
@@ -102,8 +147,17 @@
             <span>Best</span>
             <strong id="over-best">0</strong>
           </div>
+          <div id="over-depth-wrap">
+            <span>Floors cleared</span>
+            <strong id="over-depth">0</strong>
+          </div>
+          <div id="over-xp-wrap">
+            <span>XP gained</span>
+            <strong id="over-xp">+0</strong>
+          </div>
         </div>
-        <button id="btn-again" class="primary" type="button">Play again</button>
+        <p class="meta-line">Hero level: <strong id="over-level">Lvl 1</strong></p>
+        <button id="btn-again" class="primary" type="button">Back to menu</button>
       </div>
     </div>
 
