@@ -1,48 +1,44 @@
 /**
- * Match detection, valid-move search, and hints.
+ * Match detection that skips stones and only matches gems.
  */
+import { isGem, canSwapTile, matchableType } from './hazards.js';
 
 export function findMatchGroups(grid, cols, rows) {
-  const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
   const groups = [];
 
-  // Horizontal runs
   for (let y = 0; y < rows; y++) {
     let x = 0;
     while (x < cols) {
-      if (!grid[y][x].alive) {
+      const type = matchableType(grid[y][x]);
+      if (type === null) {
         x++;
         continue;
       }
-      const type = grid[y][x].type;
       let len = 1;
-      while (x + len < cols && grid[y][x + len].alive && grid[y][x + len].type === type) len++;
+      while (x + len < cols && matchableType(grid[y][x + len]) === type) len++;
       if (len >= 3) {
         const cells = [];
         for (let i = 0; i < len; i++) cells.push({ x: x + i, y });
         groups.push({ cells, type, axis: 'h', length: len });
-        for (let i = 0; i < len; i++) visited[y][x + i] = true;
       }
       x += len;
     }
   }
 
-  // Vertical runs
   for (let x = 0; x < cols; x++) {
     let y = 0;
     while (y < rows) {
-      if (!grid[y][x].alive) {
+      const type = matchableType(grid[y][x]);
+      if (type === null) {
         y++;
         continue;
       }
-      const type = grid[y][x].type;
       let len = 1;
-      while (y + len < rows && grid[y + len][x].alive && grid[y + len][x].type === type) len++;
+      while (y + len < rows && matchableType(grid[y + len][x]) === type) len++;
       if (len >= 3) {
         const cells = [];
         for (let i = 0; i < len; i++) cells.push({ x, y: y + i });
         groups.push({ cells, type, axis: 'v', length: len });
-        for (let i = 0; i < len; i++) visited[y + i][x] = true;
       }
       y += len;
     }
@@ -51,32 +47,31 @@ export function findMatchGroups(grid, cols, rows) {
   return groups;
 }
 
-/** Unique set of matched cell coordinates. */
 export function flattenMatches(groups) {
-  const key = (c) => `${c.x},${c.y}`;
   const map = new Map();
   for (const g of groups) {
-    for (const c of g.cells) map.set(key(c), c);
+    for (const c of g.cells) map.set(`${c.x},${c.y}`, c);
   }
   return [...map.values()];
 }
 
 export function checkMatchAt(grid, cols, rows, x, y) {
-  if (!grid[y]?.[x]?.alive) return false;
-  const type = grid[y][x].type;
+  const type = matchableType(grid[y]?.[x]);
+  if (type === null) return false;
 
   let h = 1;
-  for (let i = x - 1; i >= 0 && grid[y][i].alive && grid[y][i].type === type; i--) h++;
-  for (let i = x + 1; i < cols && grid[y][i].alive && grid[y][i].type === type; i++) h++;
+  for (let i = x - 1; i >= 0 && matchableType(grid[y][i]) === type; i--) h++;
+  for (let i = x + 1; i < cols && matchableType(grid[y][i]) === type; i++) h++;
   if (h >= 3) return true;
 
   let v = 1;
-  for (let i = y - 1; i >= 0 && grid[i][x].alive && grid[i][x].type === type; i--) v++;
-  for (let i = y + 1; i < rows && grid[i][x].alive && grid[i][x].type === type; i++) v++;
+  for (let i = y - 1; i >= 0 && matchableType(grid[i][x]) === type; i--) v++;
+  for (let i = y + 1; i < rows && matchableType(grid[i][x]) === type; i++) v++;
   return v >= 3;
 }
 
 export function wouldCreateMatch(grid, cols, rows, x1, y1, x2, y2) {
+  if (!canSwapTile(grid[y1][x1]) || !canSwapTile(grid[y2][x2])) return false;
   swapInPlace(grid, x1, y1, x2, y2);
   const ok = checkMatchAt(grid, cols, rows, x1, y1) || checkMatchAt(grid, cols, rows, x2, y2);
   swapInPlace(grid, x1, y1, x2, y2);
@@ -99,7 +94,6 @@ export function hasValidMoves(grid, cols, rows) {
   return findHint(grid, cols, rows) !== null;
 }
 
-/** Returns { a:{x,y}, b:{x,y} } for one valid swap, or null. */
 export function findHint(grid, cols, rows) {
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols - 1; x++) {
@@ -117,3 +111,5 @@ export function findHint(grid, cols, rows) {
   }
   return null;
 }
+
+export { isGem, canSwapTile };

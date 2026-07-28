@@ -16,7 +16,7 @@ export function drawBoardBackground(p5, w, h, tile) {
   }
 }
 
-export function drawGem(p5, tile, type, special, opts = {}) {
+export function drawGem(p5, tileSize, type, special, opts = {}) {
   const {
     selected = false,
     hover = false,
@@ -25,12 +25,23 @@ export function drawGem(p5, tile, type, special, opts = {}) {
     flash = 0,
     pop = 0,
     alpha = 255,
+    ice = 0,
+    stone = 0,
+    jelly = 0,
+    cursed = false,
   } = opts;
 
-  const pad = tile * 0.1;
-  const size = tile - pad * 2;
-  const cx = tile / 2;
-  const cy = tile / 2;
+  const pad = tileSize * 0.1;
+  const size = tileSize - pad * 2;
+  const cx = tileSize / 2;
+  const cy = tileSize / 2;
+
+  // Stone blocker — drawn instead of a gem
+  if (stone > 0) {
+    drawStone(p5, tileSize, stone, { selected, hover, flash, pop, alpha });
+    return;
+  }
+
   const colors = GEM_COLORS[type % GEM_COLORS.length];
   const shape = GEM_SHAPES[type % GEM_SHAPES.length];
 
@@ -43,7 +54,17 @@ export function drawGem(p5, tile, type, special, opts = {}) {
   p5.scale(scale);
   p5.translate(-cx, -cy);
 
-  // Selection / hint / hover ring (drawn under gem)
+  // Jelly underlay — vivid so it reads on mobile
+  if (jelly > 0) {
+    p5.noStroke();
+    p5.fill(200, 60, 170, 140);
+    p5.rect(pad * 0.35, pad * 0.35, tileSize - pad * 0.7, tileSize - pad * 0.7, tileSize * 0.22);
+    p5.stroke(255, 140, 220, 180);
+    p5.strokeWeight(2);
+    p5.noFill();
+    p5.rect(pad * 0.5, pad * 0.5, tileSize - pad, tileSize - pad, tileSize * 0.2);
+  }
+
   if (selected || highlight || hover) {
     p5.noFill();
     if (selected) {
@@ -56,42 +77,118 @@ export function drawGem(p5, tile, type, special, opts = {}) {
       p5.stroke(255, 255, 255, 70);
       p5.strokeWeight(2);
     }
-    p5.rect(pad * 0.4, pad * 0.4, tile - pad * 0.8, tile - pad * 0.8, tile * 0.18);
+    p5.rect(pad * 0.4, pad * 0.4, tileSize - pad * 0.8, tileSize - pad * 0.8, tileSize * 0.18);
   }
 
-  // Soft shadow
   p5.noStroke();
   p5.fill(0, 0, 0, Math.min(90, alpha * 0.35));
   drawShape(p5, shape, cx + 1.5, cy + 2.5, size * 0.92);
 
-  // Body
-  p5.fill(colors.fill[0], colors.fill[1], colors.fill[2], alpha);
+  // Cursed gems get a darker body tint
+  if (cursed) {
+    p5.fill(
+      Math.floor(colors.fill[0] * 0.45),
+      Math.floor(colors.fill[1] * 0.35),
+      Math.floor(colors.fill[2] * 0.55),
+      alpha
+    );
+  } else {
+    p5.fill(colors.fill[0], colors.fill[1], colors.fill[2], alpha);
+  }
   drawShape(p5, shape, cx, cy, size);
 
-  // Specular
   p5.fill(255, 255, 255, Math.min(90, alpha * 0.35));
   drawShape(p5, shape, cx - size * 0.08, cy - size * 0.12, size * 0.45);
 
-  // Special badges
   if (special === SPECIAL.ROCKET) {
     drawRocketBadge(p5, cx, cy, size, alpha);
   } else if (special === SPECIAL.BOMB) {
     drawBombBadge(p5, cx, cy, size, alpha);
   }
 
-  // Hint pulse on top so it stays visible
+  if (cursed) {
+    p5.noFill();
+    p5.stroke(140, 60, 200, 160 + Math.sin(p5.frameCount * 0.2) * 50);
+    p5.strokeWeight(2);
+    p5.ellipse(cx, cy, size * 0.95, size * 0.95);
+    p5.stroke(90, 30, 140, 120);
+    p5.ellipse(cx, cy, size * 0.7, size * 0.7);
+  }
+
+  // Ice overlay
+  if (ice > 0) {
+    drawIceOverlay(p5, tileSize, ice, alpha);
+  }
+
   if (hint) {
     const pulse = 0.5 + 0.5 * Math.sin(p5.frameCount * 0.35);
     p5.noFill();
     p5.stroke(120, 255, 210, 140 + pulse * 100);
     p5.strokeWeight(3 + pulse * 2);
-    p5.rect(pad * 0.15, pad * 0.15, tile - pad * 0.3, tile - pad * 0.3, tile * 0.2);
+    p5.rect(pad * 0.15, pad * 0.15, tileSize - pad * 0.3, tileSize - pad * 0.3, tileSize * 0.2);
     p5.fill(120, 255, 210, 20 + pulse * 40);
     p5.noStroke();
-    p5.rect(pad * 0.28, pad * 0.28, tile - pad * 0.56, tile - pad * 0.56, tile * 0.16);
+    p5.rect(pad * 0.28, pad * 0.28, tileSize - pad * 0.56, tileSize - pad * 0.56, tileSize * 0.16);
   }
 
   p5.pop();
+}
+
+function drawStone(p5, tileSize, hp, opts) {
+  const { flash = 0, pop = 0, alpha = 255, selected = false, hover = false } = opts;
+  const pad = tileSize * 0.08;
+  let scale = 1;
+  if (flash > 0) scale = Math.max(0.2, flash / 22);
+  if (pop > 0) scale = 1 + (1 - pop / 12) * 0.08;
+  const cx = tileSize / 2;
+  const cy = tileSize / 2;
+
+  p5.push();
+  p5.translate(cx, cy);
+  p5.scale(scale);
+  p5.translate(-cx, -cy);
+
+  if (selected || hover) {
+    p5.noFill();
+    p5.stroke(255, 180, 120);
+    p5.strokeWeight(3);
+    p5.rect(pad, pad, tileSize - pad * 2, tileSize - pad * 2, tileSize * 0.12);
+  }
+
+  p5.noStroke();
+  p5.fill(55, 52, 48, alpha);
+  p5.rect(pad, pad, tileSize - pad * 2, tileSize - pad * 2, tileSize * 0.14);
+  p5.fill(90, 84, 76, alpha);
+  p5.rect(pad + 3, pad + 3, tileSize - pad * 2 - 6, (tileSize - pad * 2) * 0.4, tileSize * 0.1);
+  // Cracks for damaged stone
+  p5.stroke(30, 28, 24, alpha);
+  p5.strokeWeight(2);
+  if (hp <= 1) {
+    p5.line(cx - tileSize * 0.2, cy - tileSize * 0.15, cx + tileSize * 0.18, cy + tileSize * 0.2);
+    p5.line(cx + tileSize * 0.05, cy - tileSize * 0.22, cx - tileSize * 0.1, cy + tileSize * 0.18);
+  }
+  p5.pop();
+}
+
+function drawIceOverlay(p5, tileSize, layers, alpha) {
+  const pad = tileSize * 0.06;
+  p5.noStroke();
+  p5.fill(170, 220, 255, layers >= 2 ? 110 : 70);
+  p5.rect(pad, pad, tileSize - pad * 2, tileSize - pad * 2, tileSize * 0.16);
+  p5.stroke(230, 245, 255, Math.min(200, alpha));
+  p5.strokeWeight(2);
+  p5.noFill();
+  p5.rect(pad + 2, pad + 2, tileSize - pad * 2 - 4, tileSize - pad * 2 - 4, tileSize * 0.14);
+  // Crystal shard lines
+  p5.stroke(255, 255, 255, 140);
+  p5.strokeWeight(1.5);
+  p5.line(tileSize * 0.3, tileSize * 0.25, tileSize * 0.55, tileSize * 0.7);
+  p5.line(tileSize * 0.6, tileSize * 0.28, tileSize * 0.4, tileSize * 0.72);
+  if (layers >= 2) {
+    p5.fill(200, 235, 255, 90);
+    p5.noStroke();
+    p5.ellipse(tileSize * 0.5, tileSize * 0.5, tileSize * 0.35, tileSize * 0.35);
+  }
 }
 
 function drawShape(p5, shape, cx, cy, size) {

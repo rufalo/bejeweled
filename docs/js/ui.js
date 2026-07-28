@@ -123,7 +123,7 @@ export function createUI(handlers) {
     }, 2200);
   }
 
-  function updateHud({ score, moves, best, combo, inventory, activeBooster, busy }) {
+  function updateHud({ score, moves, best, combo, inventory, activeBooster, busy, jelly, quakeIn }) {
     if (els.score) els.score.textContent = String(score);
     if (els.moves) els.moves.textContent = String(moves);
     if (els.best) els.best.textContent = String(best);
@@ -131,6 +131,11 @@ export function createUI(handlers) {
       els.combo.textContent = combo > 1 ? `${combo}×` : '—';
       els.combo.parentElement?.classList.toggle('hot', combo > 1);
     }
+
+    const jellyEl = document.getElementById('jelly-value');
+    const quakeEl = document.getElementById('quake-value');
+    if (jellyEl) jellyEl.textContent = String(jelly ?? 0);
+    if (quakeEl) quakeEl.textContent = String(quakeIn ?? '—');
 
     const lock = !!busy;
     if (els.hint) els.hint.disabled = lock;
