@@ -32,25 +32,18 @@ export function createUI(handlers) {
     if (!el) return;
     let lock = false;
     const go = (e) => {
-      e.preventDefault();
+      if (e) e.preventDefault();
       if (lock) return;
       lock = true;
       setTimeout(() => {
         lock = false;
-      }, 350);
+      }, 280);
       unlockAudio();
       sfx.button();
       fn();
     };
-    el.addEventListener('click', go);
-    el.addEventListener(
-      'touchend',
-      (e) => {
-        e.preventDefault();
-        go(e);
-      },
-      { passive: false }
-    );
+    // pointerup covers mouse + touch without double-firing
+    el.addEventListener('pointerup', go);
   }
 
   bind(els.playBtn, () => handlers.onPlay());
@@ -101,41 +94,33 @@ export function createUI(handlers) {
       els.combo.parentElement?.classList.toggle('hot', combo > 1);
     }
 
-    setCount(els.hammerCount, els.hammer, inventory.hammer, activeBooster === 'hammer');
-    setCount(els.scrambleCount, els.scramble, inventory.scramble, activeBooster === 'scramble');
-    setCount(els.cycleCount, els.cycle, inventory.cycle, activeBooster === 'cycle');
-
-    if (els.cancel) {
-      els.cancel.classList.toggle('visible', !!activeBooster);
-    }
-    if (els.modeHint) {
-      if (activeBooster) {
-        els.modeHint.textContent = boosterHint(activeBooster);
-        els.modeHint.classList.add('visible');
-      } else {
-        els.modeHint.classList.remove('visible');
-      }
-    }
-
     const lock = !!busy;
-    [els.hint, els.rotateL, els.rotateR, els.hammer, els.scramble, els.cycle].forEach((btn) => {
-      if (btn) btn.disabled = lock && !activeBooster;
-    });
-  }
-
-  function setCount(countEl, btn, n, active) {
-    if (countEl) countEl.textContent = String(n);
-    if (btn) {
-      btn.disabled = n <= 0 && !active;
-      btn.classList.toggle('active', !!active);
-    }
-  }
+    if (els.hint) els.hint.disabled = lock;
+    if (els.rotateL) els.rotateL.disabled = lock;
+    if (els.rotateR) els.rotateR.disabled = lock;
+    // Boosters: disabled when empty (unless active) or when board is busy
+    setCount(els.hammerCount, els.hammer, inventory.hammer, activeBooster === 'hammer', lock);
+    setCount(els.scrambleCount, els.scramble, inventory.scramble, activeBooster === 'scramble', lock);
+    setCount(els.cycleCount, els.cycle, inventory.cycle, activeBooster === 'cycle', lock);
 
   function boosterHint(name) {
     if (name === 'hammer') return 'Tap a gem to smash it';
     if (name === 'scramble') return 'Tap a gem to scramble its row/col';
     if (name === 'cycle') return 'Tap a gem to cycle its row/col colors';
     return '';
+  }
+
+  let toastTimer = null;
+  function showToast(message) {
+    if (!els.modeHint) return;
+    els.modeHint.textContent = message;
+    els.modeHint.classList.add('visible');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      if (!document.getElementById('btn-cancel')?.classList.contains('visible')) {
+        els.modeHint.classList.remove('visible');
+      }
+    }, 2200);
   }
 
   updateMuteButton();
@@ -146,5 +131,6 @@ export function createUI(handlers) {
     hideGameOver,
     updateHud,
     updateMuteButton,
+    showToast,
   };
 }

@@ -21,12 +21,14 @@ export function createInputController(callbacks) {
 
   function onPointerDown(game, x, y) {
     if (!game.canInteract()) return;
+    const cell = cellAt(game, x, y);
+    if (!cell) return;
     state.down = true;
     state.swiped = false;
     state.suppressClick = false;
     state.startX = x;
     state.startY = y;
-    state.startCell = cellAt(game, x, y);
+    state.startCell = cell;
   }
 
   function onPointerMove(game, x, y) {

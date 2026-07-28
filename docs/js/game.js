@@ -207,10 +207,14 @@ function cancelBooster(game) {
 function showHint(game) {
   if (!game.canInteract()) return;
   const hint = findHint(game.grid, game.cols, game.rows);
-  if (!hint) return;
+  if (!hint) {
+    game.ui.showToast('No moves found');
+    return;
+  }
   game.hint = hint;
-  game.hintTimer = 120;
+  game.hintTimer = 150;
   sfx.hint();
+  game.ui.showToast('Swap the glowing gems');
 }
 
 function requestRotate(game, dir) {
