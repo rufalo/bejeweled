@@ -1,6 +1,6 @@
 # Jewel Cascade
 
-Mobile-first match-three puzzle game. Static site — no build step, no backend.
+Mobile-first match-three with a **Rogue** descent mode. Static site — no build step, no backend.
 
 **Play:** [https://rufalo.github.io/bejeweled/](https://rufalo.github.io/bejeweled/)
 
@@ -13,30 +13,25 @@ python3 -m http.server 8000
 
 ES modules need an HTTP server (`file://` will fail CORS).
 
-## What’s new
+## Modes
+- **Rogue** — limited moves, floor score goals, run perks, XP + permanent meta perks on level-up (Normal / Hard / Brutal)
+- **Zen** — endless classic high-score mode
+
+## Features
 - Swipe-to-swap controls tuned for phones
-- Thumb-zone toolbar + single-screen layout (no scroll)
-- Shape-coded gems (colorblind-friendlier)
-- Specials: match 4 → rocket, match 5 → bomb
-- Boosters: Hammer, Scramble, Cycle (earned from color clears)
-- Hint, board rotate, combo scoring, particles, Web Audio SFX
-- High score / mute / best combo in `localStorage`
+- Shape-coded gems, rockets, bombs, boosters
+- Hint, board rotate, combos, particles, Web Audio SFX
+- Progress saved in `localStorage` (high score, mute, rogue profile)
 
 ## Manual test checklist
-- Board loads with no opening matches
-- Swipe adjacent gems to swap; invalid swaps bounce back
-- Tap-select + tap-adjacent still works
-- Cascades award combo multipliers
-- Match-4 creates a rocket; matching it clears a cross
-- Match-5 creates a bomb; matching it clears a 3×3
-- Boosters enable when earned; cancel exits targeting
-- Hint pulses a valid move
-- Rotate remaps the board without breaking input
-- Mute and high score persist across refresh
-- Game-over overlay + Play again
-- Dragging on the board does not scroll the page
+- Start screen shows level / XP / difficulties
+- Rogue Normal: moves count down, goal fills, floor advances after perk pick
+- Hard/Brutal start with fewer moves
+- Level-up after enough XP offers a permanent perk
+- Zen mode still plays without move limits
+- Hint, rotate, mute, menu still work
 
 ## Stack
 - `docs/` is the GitHub Pages root
 - p5.js (vendored) + vanilla ES modules
-- See `plan.md` for the remake roadmap
+- See `plan.md` for the longer roadmap

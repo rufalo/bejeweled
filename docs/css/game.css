@@ -100,8 +100,192 @@ body {
 
 .hud {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.4rem;
+}
+
+.stat.hidden {
+  display: none;
+}
+
+.xp-bar {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.xp-track {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.xp-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2ec4a0, #f0b429);
+  transition: width 0.35s ease;
+}
+
+.xp-label {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.start-card {
+  max-height: min(92vh, 720px);
+  overflow-y: auto;
+}
+
+.tagline {
+  margin-top: 0 !important;
+}
+
+.profile-chip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.profile-chip div {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 0.55rem 0.35rem;
+}
+
+.profile-chip span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.profile-chip strong {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+}
+
+.meta-line {
+  color: var(--muted);
+  font-size: 0.82rem !important;
+  margin: 0 0 1rem !important;
+}
+
+.mode-block h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.diff-grid {
+  display: grid;
+  gap: 0.45rem;
+  margin-bottom: 0.9rem;
+}
+
+.diff-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 0.7rem 0.85rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.diff-btn strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.diff-btn small {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.diff-btn.selected,
+.diff-btn:active {
+  border-color: rgba(46, 196, 160, 0.65);
+  box-shadow: 0 0 0 1px rgba(46, 196, 160, 0.2) inset;
+}
+
+.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 12px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.over-reason {
+  margin-top: -0.35rem !important;
+}
+
+.over-stats .hidden {
+  display: none;
+}
+
+.perk-choices {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.5rem;
+}
+
+.perk-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 0.85rem 0.9rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.perk-card strong {
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.perk-card span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.perk-card.rarity-uncommon {
+  border-color: rgba(82, 180, 255, 0.45);
+}
+
+.perk-card.rarity-rare {
+  border-color: rgba(240, 180, 41, 0.55);
+}
+
+.perk-card:active {
+  transform: scale(0.98);
 }
 
 .stat {
@@ -280,7 +464,7 @@ body {
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -289,6 +473,14 @@ body {
     radial-gradient(80% 60% at 50% 20%, rgba(46, 196, 160, 0.18), transparent 55%),
     rgba(4, 10, 12, 0.82);
   backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.overlay .overlay-card,
+.overlay button {
+  pointer-events: auto;
+  position: relative;
+  z-index: 41;
 }
 
 .overlay.hidden {

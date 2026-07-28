@@ -32,9 +32,56 @@ import {
   saveBestCombo,
   loadMuted,
 } from './storage.js';
+import { loadProfile, saveProfile, grantXp, addMetaPerk, xpProgress } from './meta.js';
+import { MODES, floorMoves, floorTarget, calcRunXp } from './rogue.js';
+import {
+  PERKS,
+  RUN_PERK_IDS,
+  META_PERK_IDS,
+  createEmptyRunModifiers,
+  applyMetaToRun,
+  startingInventoryFromMeta,
+  targetMultiplierFromMeta,
+  rollPerkChoices,
+} from './perks.js';
 
 export function createGame() {
-  const game = {
+  const game = blankGame();
+  game.highScore = loadHighScore();
+  game.bestCombo = loadBestCombo();
+  game.profile = loadProfile();
+  game.difficulty = game.profile.preferredDifficulty || 'normal';
+  setMuted(loadMuted());
+
+  game.ui = createUI({
+    onPlayZen: () => beginSession(game, MODES.ZEN),
+    onPlayRogue: (diff) => beginSession(game, MODES.ROGUE, diff),
+    onRestart: () => abortToMenu(game),
+    onHint: () => showHint(game),
+    onRotate: (dir) => requestRotate(game, dir),
+    onBooster: (name) => activateBooster(game, name),
+    onCancelBooster: () => cancelBooster(game),
+    onPickPerk: (perkId) => resolvePerkPick(game, perkId),
+    onContinueAfterOver: () => abortToMenu(game),
+  });
+
+  game.input = createInputController({
+    onTap: (cell) => handleTap(game, cell),
+    onSwipe: (a, b) => trySwap(game, a, b),
+  });
+
+  game.canInteract = () =>
+    game.started &&
+    game.phase === 'idle' &&
+    !game.rotating &&
+    !game.pendingPerkChoices;
+
+  game.screenToCell = (sx, sy) => screenToCell(game, sx, sy);
+  return game;
+}
+
+function blankGame() {
+  return {
     cols: GRID.cols,
     rows: GRID.rows,
     grid: null,
@@ -43,6 +90,9 @@ export function createGame() {
     canvasH: 0,
     score: 0,
     moves: 0,
+    movesLeft: 0,
+    floorScore: 0,
+    floorTarget: 0,
     highScore: 0,
     bestCombo: 1,
     combo: 1,
@@ -54,7 +104,7 @@ export function createGame() {
     particles: createParticleSystem(),
     inventory: { hammer: 0, scramble: 0, cycle: 0 },
     activeBooster: null,
-    phase: 'idle', // idle | swapping | destroying | falling | rotating | gameover
+    phase: 'idle',
     destroyTimer: 0,
     pendingClear: null,
     lastSwapTarget: null,
@@ -67,34 +117,18 @@ export function createGame() {
     p5: null,
     ui: null,
     input: null,
+    mode: MODES.ROGUE,
+    difficulty: 'normal',
+    depth: 1,
+    floorsCleared: 0,
+    runBestCombo: 1,
+    runMods: createEmptyRunModifiers(),
+    profile: null,
+    pendingMetaLevels: 0,
+    pendingPerkChoices: null,
+    lastXpGain: 0,
+    endReason: '',
   };
-
-  game.highScore = loadHighScore();
-  game.bestCombo = loadBestCombo();
-  setMuted(loadMuted());
-
-  game.ui = createUI({
-    onPlay: () => startGame(game),
-    onRestart: () => restartGame(game),
-    onHint: () => showHint(game),
-    onRotate: (dir) => requestRotate(game, dir),
-    onBooster: (name) => activateBooster(game, name),
-    onCancelBooster: () => cancelBooster(game),
-  });
-
-  game.input = createInputController({
-    onTap: (cell) => handleTap(game, cell),
-    onSwipe: (a, b) => trySwap(game, a, b),
-  });
-
-  game.canInteract = () =>
-    game.started &&
-    game.phase === 'idle' &&
-    !game.rotating;
-
-  game.screenToCell = (sx, sy) => screenToCell(game, sx, sy);
-
-  return game;
 }
 
 export function setupP5(game, p5) {
@@ -102,17 +136,14 @@ export function setupP5(game, p5) {
   computeSize(game);
   const canvas = p5.createCanvas(game.canvasW, game.canvasH);
   canvas.parent('board-host');
-
-  // Prevent browser gestures on the canvas
   const el = canvas.elt;
   el.style.touchAction = 'none';
   el.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
 
   game.grid = createBoard(game.cols, game.rows);
   game.ui.updateHud(hudPayload(game));
-  game.ui.setPlaying(false);
+  game.ui.showStart(game.profile, game.difficulty);
 
-  // Recompute after layout settles (mobile browser chrome, flex sizing)
   requestAnimationFrame(() => {
     computeSize(game);
     p5.resizeCanvas(game.canvasW, game.canvasH);
@@ -129,21 +160,70 @@ function computeSize(game) {
   const maxW = host ? host.clientWidth : Math.min(window.innerWidth - 24, 480);
   const maxH = host ? host.clientHeight : Math.min(window.innerHeight * 0.55, 480);
   const side = Math.min(maxW, maxH);
-  game.tileSize = Math.floor(side / game.cols);
-  game.tileSize = Math.max(32, Math.min(game.tileSize, 72));
+  game.tileSize = Math.max(32, Math.min(Math.floor(side / game.cols), 72));
   game.canvasW = game.cols * game.tileSize;
   game.canvasH = game.rows * game.tileSize;
 }
 
-function startGame(game) {
+function beginSession(game, mode, difficulty) {
   unlockAudio();
-  restartGame(game);
+  game.mode = mode;
+  if (mode === MODES.ROGUE) {
+    game.difficulty = difficulty || 'normal';
+    game.profile.preferredDifficulty = game.difficulty;
+    saveProfile(game.profile);
+  }
+  wipeBoard(game);
+  if (mode === MODES.ROGUE) startRogueRun(game);
+  else startZenRun(game);
   game.started = true;
+  game.ui.hideAllOverlays();
   game.ui.setPlaying(true);
-  game.ui.hideGameOver();
+  game.ui.updateHud(hudPayload(game));
 }
 
-function restartGame(game) {
+function startZenRun(game) {
+  game.depth = 0;
+  game.movesLeft = 0;
+  game.floorScore = 0;
+  game.floorTarget = 0;
+  game.floorsCleared = 0;
+  game.runMods = createEmptyRunModifiers();
+  game.inventory = { hammer: 0, scramble: 0, cycle: 0 };
+  game.score = 0;
+  game.moves = 0;
+}
+
+function startRogueRun(game) {
+  game.depth = 1;
+  game.floorsCleared = 0;
+  game.runBestCombo = 1;
+  game.lastXpGain = 0;
+  game.pendingMetaLevels = 0;
+  game.score = 0;
+  game.moves = 0;
+  game.runMods = createEmptyRunModifiers();
+  applyMetaToRun(game.runMods, game.profile.metaPerks || []);
+  game.inventory = startingInventoryFromMeta(game.profile.metaPerks || []);
+  game.profile.totalRuns = (game.profile.totalRuns || 0) + 1;
+  saveProfile(game.profile);
+  setupFloor(game, true);
+}
+
+function setupFloor(game, freshBoard) {
+  const tMult = targetMultiplierFromMeta(game.profile.metaPerks || []);
+  game.floorTarget = Math.floor(floorTarget(game.difficulty, game.depth) * tMult);
+  game.floorScore = 0;
+  game.movesLeft = floorMoves(game.difficulty, game.depth, game.runMods.bonusMoves);
+  game.combo = game.runMods.comboStart || 1;
+  game.runMods.secondWindUsed = false;
+  if (freshBoard) {
+    game.grid = createBoard(game.cols, game.rows);
+  }
+  game.ui.showToast(`Floor ${game.depth} — score ${game.floorTarget} · ${game.movesLeft} moves`);
+}
+
+function wipeBoard(game) {
   game.cols = GRID.cols;
   game.rows = GRID.rows;
   game.grid = createBoard(game.cols, game.rows);
@@ -156,7 +236,6 @@ function restartGame(game) {
   game.hintTimer = 0;
   game.floating = [];
   game.particles = createParticleSystem();
-  game.inventory = { hammer: 0, scramble: 0, cycle: 0 };
   game.activeBooster = null;
   game.phase = 'idle';
   game.destroyTimer = 0;
@@ -167,23 +246,45 @@ function restartGame(game) {
   game.targetRotation = 0;
   game.rotDir = 0;
   game.rotating = false;
-  game.started = true;
+  game.pendingPerkChoices = null;
   computeSize(game);
-  game.p5.resizeCanvas(game.canvasW, game.canvasH);
-  game.ui.hideGameOver();
-  game.ui.setPlaying(true);
+  if (game.p5) game.p5.resizeCanvas(game.canvasW, game.canvasH);
+}
+
+function abortToMenu(game) {
+  game.started = false;
+  game.phase = 'idle';
+  game.pendingPerkChoices = null;
+  game.ui.hideAllOverlays();
+  game.ui.showStart(game.profile, game.difficulty);
+  game.ui.setPlaying(false);
   game.ui.updateHud(hudPayload(game));
 }
 
 function hudPayload(game) {
+  const progress = xpProgress(game.profile);
   return {
+    mode: game.mode,
     score: game.score,
-    moves: game.moves,
+    moves: game.mode === MODES.ROGUE ? game.movesLeft : game.moves,
+    movesLabel: game.mode === MODES.ROGUE ? 'Left' : 'Moves',
     best: game.highScore,
     combo: game.combo,
     inventory: game.inventory,
     activeBooster: game.activeBooster,
-    busy: game.phase !== 'idle' || game.rotating,
+    busy: game.phase !== 'idle' || game.rotating || !!game.pendingPerkChoices,
+    depth: game.mode === MODES.ROGUE ? game.depth : null,
+    floorScore: game.mode === MODES.ROGUE ? game.floorScore : null,
+    floorTarget: game.mode === MODES.ROGUE ? game.floorTarget : null,
+    xp: progress,
+    runPerks: (game.runMods.perkIds || []).map((id) => PERKS[id]?.name).filter(Boolean),
+  };
+}
+
+function matchOpts(game) {
+  return {
+    easyRockets: !!game.runMods.easyRockets,
+    bigBombs: !!game.runMods.bigBombs,
   };
 }
 
@@ -230,24 +331,20 @@ function requestRotate(game, dir) {
 function handleTap(game, cell) {
   if (!cell) return;
   unlockAudio();
-
   if (game.activeBooster) {
     useBooster(game, cell);
     return;
   }
-
   if (!game.selected) {
     game.selected = { ...cell };
     game.grid[cell.y][cell.x].selected = true;
     sfx.select();
     return;
   }
-
   if (game.selected.x === cell.x && game.selected.y === cell.y) {
     clearSelection(game);
     return;
   }
-
   if (areAdjacent(game.selected, cell)) {
     const a = { ...game.selected };
     clearSelection(game);
@@ -271,13 +368,13 @@ function clearSelection(game) {
 function trySwap(game, a, b) {
   if (!game.canInteract()) return;
   if (!areAdjacent(a, b)) return;
+  if (game.mode === MODES.ROGUE && game.movesLeft <= 0) return;
 
   clearSelection(game);
   game.hint = null;
   game.activeBooster = null;
 
   swapInPlace(game.grid, a.x, a.y, b.x, b.y);
-
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   game.grid[a.y][a.x].slideX = dx;
@@ -288,21 +385,17 @@ function trySwap(game, a, b) {
   game.lastSwapPair = { a, b };
   game.lastSwapTarget = { ...b };
   game.phase = 'swapping';
-  game.combo = 1;
+  game.combo = game.runMods.comboStart || 1;
   sfx.swap();
   game.ui.updateHud(hudPayload(game));
 }
 
 function finishSwap(game) {
   const matches = analyzeMatches(
-    game.grid,
-    game.cols,
-    game.rows,
-    game.lastSwapTarget
+    game.grid, game.cols, game.rows, game.lastSwapTarget, matchOpts(game)
   );
 
   if (matches.cells.length === 0 && game.lastSwapPair) {
-    // Revert
     const { a, b } = game.lastSwapPair;
     swapInPlace(game.grid, a.x, a.y, b.x, b.y);
     game.lastSwapPair = null;
@@ -313,7 +406,9 @@ function finishSwap(game) {
     return;
   }
 
-  game.moves++;
+  if (game.mode === MODES.ROGUE) game.movesLeft = Math.max(0, game.movesLeft - 1);
+  else game.moves++;
+
   game.lastSwapPair = null;
   beginClear(game, matches);
 }
@@ -323,25 +418,24 @@ function beginClear(game, plan) {
     (c) => game.grid[c.y][c.x].special !== SPECIAL.NONE
   );
 
-  // Award boosters from gem colors in the clear
   const colorCounts = {};
   for (const c of plan.cells) {
     const t = game.grid[c.y][c.x];
     if (!t.alive) continue;
     colorCounts[t.type] = (colorCounts[t.type] || 0) + 1;
   }
-  // ruby(2)->hammer, azure(1)->scramble, emerald(0)->cycle
-  if ((colorCounts[2] || 0) >= 3) game.inventory.hammer++;
-  if ((colorCounts[1] || 0) >= 3) game.inventory.scramble++;
-  if ((colorCounts[0] || 0) >= 3) game.inventory.cycle++;
 
-  const points = scoreForClear(plan.cells.length, game.combo, hadSpecial);
+  const scav = (game.runMods.boosterChance || 1) > 1;
+  if ((colorCounts[2] || 0) >= 3) game.inventory.hammer += scav ? 2 : 1;
+  if ((colorCounts[1] || 0) >= 3) game.inventory.scramble += scav ? 2 : 1;
+  if ((colorCounts[0] || 0) >= 3) game.inventory.cycle += scav ? 2 : 1;
+
+  let points = scoreForClear(plan.cells.length, game.combo, hadSpecial);
+  points = Math.floor(points * (game.runMods.scoreMult || 1));
   game.score += points;
-  if (game.score > game.highScore) {
-    game.highScore = saveHighScore(game.score);
-  }
+  if (game.mode === MODES.ROGUE) game.floorScore += points;
+  if (game.score > game.highScore) game.highScore = saveHighScore(game.score);
 
-  // Floating text at average position
   let ax = 0;
   let ay = 0;
   for (const c of plan.cells) {
@@ -360,7 +454,6 @@ function beginClear(game, plan) {
     size: 20 + Math.min(game.combo, 6) * 3,
   });
 
-  // Mark tiles for destruction; reserve specials to place after
   game.pendingClear = plan;
   for (const c of plan.cells) {
     const tile = game.grid[c.y][c.x];
@@ -372,10 +465,8 @@ function beginClear(game, plan) {
     tile.special = SPECIAL.NONE;
   }
 
-  // Place new specials on reserved cells (revive as special gem)
   for (const s of plan.specials) {
-    const still = plan.cells.some((c) => c.x === s.x && c.y === s.y);
-    if (!still) continue;
+    if (!plan.cells.some((c) => c.x === s.x && c.y === s.y)) continue;
     const tile = createTile(s.type, s.special);
     tile.pop = 12;
     game.grid[s.y][s.x] = tile;
@@ -386,45 +477,210 @@ function beginClear(game, plan) {
   if (hadSpecial || plan.specials.length) sfx.special();
   else sfx.match(game.combo);
 
-  if (game.combo > game.bestCombo) {
-    game.bestCombo = saveBestCombo(game.combo);
-  }
+  if (game.combo > game.bestCombo) game.bestCombo = saveBestCombo(game.combo);
+  if (game.combo > game.runBestCombo) game.runBestCombo = game.combo;
   game.ui.updateHud(hudPayload(game));
 }
 
 function afterDestroy(game) {
-  const moved = applyGravity(game.grid, game.cols, game.rows);
-  if (moved) {
-    game.phase = 'falling';
-  } else {
-    afterFall(game);
-  }
+  if (applyGravity(game.grid, game.cols, game.rows)) game.phase = 'falling';
+  else afterFall(game);
 }
 
 function afterFall(game) {
-  const plan = analyzeMatches(game.grid, game.cols, game.rows, null);
+  const plan = analyzeMatches(game.grid, game.cols, game.rows, null, matchOpts(game));
   if (plan.cells.length > 0) {
     game.combo++;
     beginClear(game, plan);
     return;
   }
 
-  game.combo = 1;
+  game.combo = game.runMods.comboStart || 1;
   game.phase = 'idle';
   game.lastSwapTarget = null;
 
+  if (game.mode === MODES.ROGUE) {
+    if (game.floorScore >= game.floorTarget) {
+      onFloorCleared(game);
+      return;
+    }
+    if (game.movesLeft <= 0) {
+      if (trySecondWind(game)) {
+        game.ui.updateHud(hudPayload(game));
+        return;
+      }
+      endRun(game, 'Out of moves');
+      return;
+    }
+  }
+
   if (!hasValidMoves(game.grid, game.cols, game.rows)) {
-    endGame(game);
+    if (game.mode === MODES.ROGUE) endRun(game, 'Board locked');
+    else endZen(game);
+    return;
   }
   game.ui.updateHud(hudPayload(game));
 }
 
-function endGame(game) {
+function trySecondWind(game) {
+  if (!game.runMods.secondWind || game.runMods.secondWindUsed) return false;
+  game.runMods.secondWindUsed = true;
+  game.movesLeft += 5;
+  game.ui.showToast('Second Wind! +5 moves');
+  sfx.special();
+  return true;
+}
+
+function onFloorCleared(game) {
+  game.floorsCleared += 1;
+  game.profile.totalFloors = (game.profile.totalFloors || 0) + 1;
+  if (game.depth > (game.profile.bestDepth || 0)) {
+    game.profile.bestDepth = game.depth;
+  }
+  saveProfile(game.profile);
+  sfx.special();
+
+  const choices = rollPerkChoices(RUN_PERK_IDS, game.runMods.perkIds, 3);
+  if (choices.length === 0) {
+    advanceFloor(game, null);
+    return;
+  }
+  game.phase = 'perkpick';
+  game.pendingPerkChoices = { kind: 'run', choices };
+  game.ui.showPerkPick({
+    title: `Floor ${game.depth} cleared!`,
+    subtitle: 'Choose a run perk',
+    choices,
+  });
+  game.ui.updateHud(hudPayload(game));
+}
+
+function resolvePerkPick(game, perkId) {
+  const pending = game.pendingPerkChoices;
+  if (!pending) return;
+  const perk = PERKS[perkId];
+  if (!perk) return;
+
+  if (pending.kind === 'run') {
+    if (!game.runMods.perkIds.includes(perkId)) {
+      game.runMods.perkIds.push(perkId);
+      if (typeof perk.applyRun === 'function') perk.applyRun(game.runMods, game);
+    }
+    game.pendingPerkChoices = null;
+    game.ui.hidePerkPick();
+    advanceFloor(game, perk);
+  } else if (pending.kind === 'meta') {
+    game.profile = addMetaPerk(game.profile, perkId);
+    game.pendingMetaLevels = Math.max(0, game.pendingMetaLevels - 1);
+    game.pendingPerkChoices = null;
+    game.ui.hidePerkPick();
+    if (game.pendingMetaLevels > 0) {
+      offerMetaPerk(game);
+    } else {
+      showRunSummary(game);
+    }
+  }
+}
+
+function advanceFloor(game) {
+  game.depth += 1;
+  wipeBoardKeepScore(game);
+  setupFloor(game, true);
+  game.phase = 'idle';
+  game.ui.updateHud(hudPayload(game));
+}
+
+function wipeBoardKeepScore(game) {
+  const score = game.score;
+  const inv = { ...game.inventory };
+  const mods = game.runMods;
+  const depth = game.depth;
+  const floors = game.floorsCleared;
+  const runBest = game.runBestCombo;
+  wipeBoard(game);
+  game.score = score;
+  game.inventory = inv;
+  game.runMods = mods;
+  game.depth = depth;
+  game.floorsCleared = floors;
+  game.runBestCombo = runBest;
+}
+
+function endZen(game) {
   game.phase = 'gameover';
   game.highScore = saveHighScore(game.score);
+  game.endReason = 'No moves left';
   sfx.gameOver();
-  game.ui.showGameOver(game.score, game.highScore);
+  game.ui.showGameOver({
+    mode: MODES.ZEN,
+    reason: game.endReason,
+    score: game.score,
+    best: game.highScore,
+    xpGain: 0,
+    profile: game.profile,
+  });
   game.ui.updateHud(hudPayload(game));
+}
+
+function endRun(game, reason) {
+  game.phase = 'gameover';
+  game.endReason = reason;
+  game.highScore = saveHighScore(game.score);
+  sfx.gameOver();
+
+  let xp = calcRunXp({
+    score: game.score,
+    depthReached: game.depth,
+    floorsCleared: game.floorsCleared,
+    bestCombo: game.runBestCombo,
+    difficulty: game.difficulty,
+    wonFloor: false,
+  });
+  xp = Math.floor(xp * (game.runMods.xpMult || 1));
+  game.lastXpGain = xp;
+
+  const result = grantXp(game.profile, xp);
+  game.profile = result.profile;
+  game.pendingMetaLevels = result.levelsGained;
+
+  if (game.pendingMetaLevels > 0) {
+    offerMetaPerk(game);
+  } else {
+    showRunSummary(game);
+  }
+  game.ui.updateHud(hudPayload(game));
+}
+
+function offerMetaPerk(game) {
+  const owned = game.profile.metaPerks || [];
+  const choices = rollPerkChoices(META_PERK_IDS, owned, 3);
+  if (choices.length === 0) {
+    game.pendingMetaLevels = 0;
+    showRunSummary(game);
+    return;
+  }
+  game.pendingPerkChoices = { kind: 'meta', choices };
+  game.ui.showPerkPick({
+    title: `Level up! → ${game.profile.level}`,
+    subtitle: 'Choose a permanent perk',
+    choices,
+  });
+}
+
+function showRunSummary(game) {
+  game.pendingPerkChoices = null;
+  game.ui.hidePerkPick();
+  game.ui.showGameOver({
+    mode: MODES.ROGUE,
+    reason: game.endReason,
+    score: game.score,
+    best: game.highScore,
+    depth: game.depth,
+    floorsCleared: game.floorsCleared,
+    xpGain: game.lastXpGain,
+    profile: game.profile,
+    runPerks: game.runMods.perkIds.map((id) => PERKS[id]).filter(Boolean),
+  });
 }
 
 function useBooster(game, cell) {
@@ -452,7 +708,7 @@ function useBooster(game, cell) {
     scrambleLine(game, cell);
     game.inventory.scramble--;
     game.activeBooster = null;
-    const plan = analyzeMatches(game.grid, game.cols, game.rows, cell);
+    const plan = analyzeMatches(game.grid, game.cols, game.rows, cell, matchOpts(game));
     if (plan.cells.length) beginClear(game, plan);
     else game.ui.updateHud(hudPayload(game));
     sfx.swap();
@@ -460,7 +716,7 @@ function useBooster(game, cell) {
     cycleLine(game, cell);
     game.inventory.cycle--;
     game.activeBooster = null;
-    const plan = analyzeMatches(game.grid, game.cols, game.rows, cell);
+    const plan = analyzeMatches(game.grid, game.cols, game.rows, cell, matchOpts(game));
     if (plan.cells.length) beginClear(game, plan);
     else game.ui.updateHud(hudPayload(game));
     sfx.swap();
@@ -468,13 +724,8 @@ function useBooster(game, cell) {
   game.ui.updateHud(hudPayload(game));
 }
 
-function preferAxis(game, cell) {
-  // Prefer the longer clear opportunity; fallback to row
-  return Math.random() < 0.5 ? 'row' : 'col';
-}
-
 function scrambleLine(game, cell) {
-  const axis = preferAxis(game, cell);
+  const axis = Math.random() < 0.5 ? 'row' : 'col';
   if (axis === 'row') {
     for (let x = 0; x < game.cols; x++) {
       if (game.grid[cell.y][x].alive) {
@@ -493,7 +744,7 @@ function scrambleLine(game, cell) {
 }
 
 function cycleLine(game, cell) {
-  const axis = preferAxis(game, cell);
+  const axis = Math.random() < 0.5 ? 'row' : 'col';
   if (axis === 'row') {
     for (let x = 0; x < game.cols; x++) {
       const t = game.grid[cell.y][x];
@@ -528,25 +779,20 @@ export function drawFrame(game) {
     if (game.hintTimer <= 0) game.hint = null;
   }
 
-  // Draw in board space with rotation
   p5.push();
   p5.translate(game.canvasW / 2, game.canvasH / 2);
   p5.rotate(game.rotation);
   p5.translate(-game.canvasW / 2, -game.canvasH / 2);
-
   drawBoardBackground(p5, game.canvasW, game.canvasH, game.tileSize);
 
   for (let y = 0; y < game.rows; y++) {
     for (let x = 0; x < game.cols; x++) {
       const tile = game.grid[y][x];
       if (!tile.alive && tile.flash <= 0) continue;
-
       const px = (x + tile.slideX) * game.tileSize;
       const py = (y + tile.slideY - tile.drop) * game.tileSize;
-
       p5.push();
       p5.translate(px, py);
-
       const isHint =
         game.hint &&
         ((game.hint.a.x === x && game.hint.a.y === y) ||
@@ -557,7 +803,6 @@ export function drawFrame(game) {
         game.hover &&
         (game.activeBooster === 'scramble' || game.activeBooster === 'cycle') &&
         (x === game.hover.x || y === game.hover.y);
-
       drawGem(p5, game.tileSize, tile.type, tile.special, {
         selected: tile.selected,
         hover: isHover && !game.activeBooster,
@@ -581,18 +826,12 @@ export function drawFrame(game) {
 
 function updatePhase(game) {
   if (game.phase === 'swapping') {
-    if (!anySliding(game.grid, game.cols, game.rows)) {
-      finishSwap(game);
-    }
+    if (!anySliding(game.grid, game.cols, game.rows)) finishSwap(game);
   } else if (game.phase === 'destroying') {
     game.destroyTimer--;
-    if (game.destroyTimer <= 0) {
-      afterDestroy(game);
-    }
+    if (game.destroyTimer <= 0) afterDestroy(game);
   } else if (game.phase === 'falling') {
-    if (!anyDropping(game.grid, game.cols, game.rows)) {
-      afterFall(game);
-    }
+    if (!anyDropping(game.grid, game.cols, game.rows)) afterFall(game);
   }
 }
 
@@ -613,25 +852,27 @@ function updateRotation(game) {
     computeSize(game);
     game.p5.resizeCanvas(game.canvasW, game.canvasH);
 
-    const plan = analyzeMatches(game.grid, game.cols, game.rows, null);
+    const plan = analyzeMatches(game.grid, game.cols, game.rows, null, matchOpts(game));
     if (plan.cells.length) {
-      game.combo = 1;
+      game.combo = game.runMods.comboStart || 1;
       beginClear(game, plan);
     } else {
       game.phase = 'idle';
-      if (!hasValidMoves(game.grid, game.cols, game.rows)) endGame(game);
+      if (!hasValidMoves(game.grid, game.cols, game.rows)) {
+        if (game.mode === MODES.ROGUE) endRun(game, 'Board locked');
+        else endZen(game);
+      }
     }
     game.ui.updateHud(hudPayload(game));
   }
 }
 
 function updateHover(game) {
-  if (!game.started || game.phase === 'gameover') {
+  if (!game.started || game.phase === 'gameover' || game.pendingPerkChoices) {
     game.hover = null;
     return;
   }
-  const cell = screenToCell(game, game.p5.mouseX, game.p5.mouseY);
-  game.hover = cell;
+  game.hover = screenToCell(game, game.p5.mouseX, game.p5.mouseY);
 }
 
 function updateFloating(game) {
@@ -644,11 +885,7 @@ function updateFloating(game) {
 }
 
 function cellCenterScreen(game, x, y) {
-  return boardToScreen(
-    game,
-    (x + 0.5) * game.tileSize,
-    (y + 0.5) * game.tileSize
-  );
+  return boardToScreen(game, (x + 0.5) * game.tileSize, (y + 0.5) * game.tileSize);
 }
 
 function boardToScreen(game, x, y) {
@@ -686,7 +923,6 @@ function screenToCell(game, sx, sy) {
   return { x, y };
 }
 
-/* ── Pointer bridges from main.js ── */
 export function pointerDown(game, x, y) {
   unlockAudio();
   game.input.onPointerDown(game, x, y);
