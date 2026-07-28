@@ -209,7 +209,7 @@ function showHint(game) {
   const hint = findHint(game.grid, game.cols, game.rows);
   if (!hint) return;
   game.hint = hint;
-  game.hintTimer = 90;
+  game.hintTimer = 120;
   sfx.hint();
 }
 
@@ -333,6 +333,9 @@ function beginClear(game, plan) {
 
   const points = scoreForClear(plan.cells.length, game.combo, hadSpecial);
   game.score += points;
+  if (game.score > game.highScore) {
+    game.highScore = saveHighScore(game.score);
+  }
 
   // Floating text at average position
   let ax = 0;
@@ -508,7 +511,7 @@ function cycleLine(game, cell) {
 
 export function drawFrame(game) {
   const p5 = game.p5;
-  p5.background(0, 0);
+  p5.background(7, 16, 22);
 
   updateRotation(game);
   tickMotion(game.grid, game.cols, game.rows, TIMING.dropSpeed, TIMING.swapSpeed);

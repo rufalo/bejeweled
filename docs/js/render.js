@@ -43,14 +43,11 @@ export function drawGem(p5, tile, type, special, opts = {}) {
   p5.scale(scale);
   p5.translate(-cx, -cy);
 
-  // Selection / hint ring
-  if (selected || hint || highlight || hover) {
+  // Selection / hint / hover ring (drawn under gem)
+  if (selected || highlight || hover) {
     p5.noFill();
     if (selected) {
       p5.stroke(255, 236, 150);
-      p5.strokeWeight(3);
-    } else if (hint) {
-      p5.stroke(120, 255, 210, 180 + Math.sin(p5.frameCount * 0.25) * 60);
       p5.strokeWeight(3);
     } else if (highlight) {
       p5.stroke(255, 160, 60);
@@ -82,12 +79,23 @@ export function drawGem(p5, tile, type, special, opts = {}) {
     drawBombBadge(p5, cx, cy, size, alpha);
   }
 
+  // Hint pulse on top so it stays visible
+  if (hint) {
+    const pulse = 0.5 + 0.5 * Math.sin(p5.frameCount * 0.35);
+    p5.noFill();
+    p5.stroke(120, 255, 210, 140 + pulse * 100);
+    p5.strokeWeight(3 + pulse * 2);
+    p5.rect(pad * 0.15, pad * 0.15, tile - pad * 0.3, tile - pad * 0.3, tile * 0.2);
+    p5.fill(120, 255, 210, 20 + pulse * 40);
+    p5.noStroke();
+    p5.rect(pad * 0.28, pad * 0.28, tile - pad * 0.56, tile - pad * 0.56, tile * 0.16);
+  }
+
   p5.pop();
 }
 
 function drawShape(p5, shape, cx, cy, size) {
   const r = size / 2;
-  p5.beginShape();
   if (shape === 'circle') {
     p5.ellipse(cx, cy, size, size);
     return;
@@ -98,6 +106,7 @@ function drawShape(p5, shape, cx, cy, size) {
     p5.rectMode(p5.CORNER);
     return;
   }
+  p5.beginShape();
   if (shape === 'diamond') {
     p5.vertex(cx, cy - r);
     p5.vertex(cx + r * 0.85, cy);
@@ -130,6 +139,7 @@ function drawShape(p5, shape, cx, cy, size) {
     p5.endShape(p5.CLOSE);
     return;
   }
+  p5.endShape();
   p5.ellipse(cx, cy, size, size);
 }
 
