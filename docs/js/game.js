@@ -13,6 +13,7 @@ import {
   hasValidMoves,
   findHint,
   swapInPlace,
+  canSwapTile,
 } from './match.js';
 import { analyzeMatches, scoreForClear } from './specials.js';
 import { createParticleSystem, spawnBurst, updateParticles, drawParticles } from './particles.js';
@@ -32,6 +33,17 @@ import {
   saveBestCombo,
   loadMuted,
 } from './storage.js';
+import {
+  seedOpeningHazards,
+  crackAdjacentHazards,
+  clearJellyUnder,
+  maybeSpawnHazards,
+  quakeBoard,
+  countJelly,
+  movesUntilQuake,
+  isStone,
+  HAZARD,
+} from './hazards.js';
 
 export function createGame() {
   const game = {
@@ -109,6 +121,7 @@ export function setupP5(game, p5) {
   el.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
 
   game.grid = createBoard(game.cols, game.rows);
+  seedOpeningHazards(game.grid, game.cols, game.rows);
   game.ui.updateHud(hudPayload(game));
   game.ui.setPlaying(false);
 
@@ -147,6 +160,7 @@ function restartGame(game) {
   game.cols = GRID.cols;
   game.rows = GRID.rows;
   game.grid = createBoard(game.cols, game.rows);
+  seedOpeningHazards(game.grid, game.cols, game.rows);
   game.score = 0;
   game.moves = 0;
   game.combo = 1;
@@ -168,11 +182,18 @@ function restartGame(game) {
   game.rotDir = 0;
   game.rotating = false;
   game.started = true;
+  game.pendingQuake = false;
   computeSize(game);
   game.p5.resizeCanvas(game.canvasW, game.canvasH);
   game.ui.hideGameOver();
   game.ui.setPlaying(true);
   game.ui.updateHud(hudPayload(game));
+  const jelly = countJelly(game.grid, game.cols, game.rows);
+  game.ui.showToast(
+    jelly > 0
+      ? `Clear ${jelly} jelly · ice blocks swaps · quake every ${HAZARD.quakeEvery}`
+      : `Ice blocks swaps · quake every ${HAZARD.quakeEvery} moves`
+  );
 }
 
 function hudPayload(game) {
@@ -184,6 +205,8 @@ function hudPayload(game) {
     inventory: game.inventory,
     activeBooster: game.activeBooster,
     busy: game.phase !== 'idle' || game.rotating,
+    jelly: countJelly(game.grid, game.cols, game.rows),
+    quakeIn: movesUntilQuake(game.moves),
   };
 }
 
@@ -272,6 +295,14 @@ function trySwap(game, a, b) {
   if (!game.canInteract()) return;
   if (!areAdjacent(a, b)) return;
 
+  const t1 = game.grid[a.y][a.x];
+  const t2 = game.grid[b.y][b.x];
+  if (!canSwapTile(t1) || !canSwapTile(t2)) {
+    sfx.invalid();
+    game.ui.showToast('Frozen or blocked!');
+    return;
+  }
+
   clearSelection(game);
   game.hint = null;
   game.activeBooster = null;
@@ -314,68 +345,130 @@ function finishSwap(game) {
   }
 
   game.moves++;
+  game.quakeDoneForMove = false;
   game.lastSwapPair = null;
   beginClear(game, matches);
 }
 
 function beginClear(game, plan) {
-  const hadSpecial = plan.cells.some(
+  // Split stones hit by specials from actual gem clears
+  const gemCells = [];
+  const stoneHits = [];
+  for (const c of plan.cells) {
+    const t = game.grid[c.y][c.x];
+    if (isStone(t)) stoneHits.push(c);
+    else gemCells.push(c);
+  }
+
+  // Snapshot cursed flags before we wipe tiles
+  const curseSources = gemCells.filter((c) => game.grid[c.y][c.x].cursed);
+
+  const hadSpecial = gemCells.some(
     (c) => game.grid[c.y][c.x].special !== SPECIAL.NONE
   );
 
-  // Award boosters from gem colors in the clear
   const colorCounts = {};
-  for (const c of plan.cells) {
+  for (const c of gemCells) {
     const t = game.grid[c.y][c.x];
-    if (!t.alive) continue;
+    if (!t.alive || t.type < 0) continue;
     colorCounts[t.type] = (colorCounts[t.type] || 0) + 1;
   }
-  // ruby(2)->hammer, azure(1)->scramble, emerald(0)->cycle
   if ((colorCounts[2] || 0) >= 3) game.inventory.hammer++;
   if ((colorCounts[1] || 0) >= 3) game.inventory.scramble++;
   if ((colorCounts[0] || 0) >= 3) game.inventory.cycle++;
 
-  const points = scoreForClear(plan.cells.length, game.combo, hadSpecial);
+  const jellyCleared = clearJellyUnder(game.grid, gemCells);
+  let points = scoreForClear(gemCells.length, game.combo, hadSpecial);
+  points += jellyCleared * 40 * game.combo;
   game.score += points;
   if (game.score > game.highScore) {
     game.highScore = saveHighScore(game.score);
   }
 
-  // Floating text at average position
-  let ax = 0;
-  let ay = 0;
-  for (const c of plan.cells) {
-    ax += (c.x + 0.5) * game.tileSize;
-    ay += (c.y + 0.5) * game.tileSize;
+  if (gemCells.length) {
+    let ax = 0;
+    let ay = 0;
+    for (const c of gemCells) {
+      ax += (c.x + 0.5) * game.tileSize;
+      ay += (c.y + 0.5) * game.tileSize;
+    }
+    ax /= gemCells.length;
+    ay /= gemCells.length;
+    game.floating.push({
+      bx: ax,
+      by: ay,
+      text: jellyCleared ? `+${points} ★` : `+${points}`,
+      life: 50,
+      maxLife: 50,
+      rise: 0,
+      size: 20 + Math.min(game.combo, 6) * 3,
+    });
   }
-  ax /= plan.cells.length;
-  ay /= plan.cells.length;
-  game.floating.push({
-    bx: ax,
-    by: ay,
-    text: `+${points}`,
-    life: 50,
-    maxLife: 50,
-    rise: 0,
-    size: 20 + Math.min(game.combo, 6) * 3,
-  });
 
-  // Mark tiles for destruction; reserve specials to place after
+  // Crack adjacent ice/stones from gem clears
+  crackAdjacentHazards(game.grid, game.cols, game.rows, gemCells);
+
+  // Stones hit by rockets/bombs take damage
+  for (const c of stoneHits) {
+    const t = game.grid[c.y][c.x];
+    if (!isStone(t)) continue;
+    t.stone -= 1;
+    t.pop = 10;
+    if (t.stone <= 0) {
+      t.alive = false;
+      t.flash = TIMING.flashFrames;
+      t.stone = 0;
+      const pos = cellCenterScreen(game, c.x, c.y);
+      spawnBurst(game.particles, pos.x, pos.y, [90, 84, 76], 12);
+    }
+  }
+
   game.pendingClear = plan;
-  for (const c of plan.cells) {
+  for (const c of gemCells) {
     const tile = game.grid[c.y][c.x];
-    const rgb = GEM_COLORS[tile.type % GEM_COLORS.length].fill;
+    const rgb =
+      tile.type >= 0
+        ? GEM_COLORS[tile.type % GEM_COLORS.length].fill
+        : [200, 200, 200];
     const pos = cellCenterScreen(game, c.x, c.y);
     spawnBurst(game.particles, pos.x, pos.y, rgb, tile.special ? 16 : 10);
     tile.alive = false;
     tile.flash = TIMING.flashFrames;
     tile.special = SPECIAL.NONE;
+    tile.ice = 0;
+    tile.cursed = false;
+    tile.jelly = 0;
   }
 
-  // Place new specials on reserved cells (revive as special gem)
+  // Curses trigger after clear (freeze neighbors still alive)
+  if (curseSources.length) {
+    // Mark temporarily so triggerCurses can see them — already wiped.
+    // Re-run freeze using saved positions:
+    for (const c of curseSources) {
+      let placed = 0;
+      let tries = 0;
+      while (placed < 2 && tries++ < 24) {
+        const x = Math.min(
+          game.cols - 1,
+          Math.max(0, c.x + Math.floor(Math.random() * 5) - 2)
+        );
+        const y = Math.min(
+          game.rows - 1,
+          Math.max(0, c.y + Math.floor(Math.random() * 5) - 2)
+        );
+        const t = game.grid[y][x];
+        if (t.alive && !isStone(t) && (t.ice || 0) === 0 && t.type >= 0) {
+          t.ice = 1;
+          t.pop = 12;
+          placed++;
+        }
+      }
+    }
+    game.ui.showToast('Curse spreads ice!');
+  }
+
   for (const s of plan.specials) {
-    const still = plan.cells.some((c) => c.x === s.x && c.y === s.y);
-    if (!still) continue;
+    if (!gemCells.some((c) => c.x === s.x && c.y === s.y)) continue;
     const tile = createTile(s.type, s.special);
     tile.pop = 12;
     game.grid[s.y][s.x] = tile;
@@ -410,8 +503,31 @@ function afterFall(game) {
   }
 
   game.combo = 1;
-  game.phase = 'idle';
   game.lastSwapTarget = null;
+
+  // Quake on schedule after cascades settle
+  if (game.moves > 0 && game.moves % HAZARD.quakeEvery === 0 && !game.quakeDoneForMove) {
+    game.quakeDoneForMove = true;
+    const q = quakeBoard(game.grid, game.cols, game.rows);
+    game.ui.showToast(`Quake! Row ${q.row + 1} shifts`);
+    sfx.special();
+    game.phase = 'idle';
+    // Allow slide animation then check matches
+    game.phase = 'falling'; // reuse falling wait for slide
+    // Actually slides use slideX — wait via swapping-like check
+    game.phase = 'quaking';
+    game.ui.updateHud(hudPayload(game));
+    return;
+  }
+
+  // Progressive hazard spawns
+  const spawned = maybeSpawnHazards(game.grid, game.cols, game.rows, game.moves);
+  if (spawned.length) {
+    const kinds = spawned.map((e) => e.kind).join(', ');
+    game.ui.showToast(`Hazard: ${kinds}`);
+  }
+
+  game.phase = 'idle';
 
   if (!hasValidMoves(game.grid, game.cols, game.rows)) {
     endGame(game);
@@ -437,16 +553,37 @@ function useBooster(game, cell) {
   if (name === 'hammer') {
     const tile = game.grid[cell.y][cell.x];
     if (!tile.alive) return;
-    tile.alive = false;
-    tile.flash = TIMING.flashFrames;
-    const rgb = GEM_COLORS[tile.type].fill;
     const pos = cellCenterScreen(game, cell.x, cell.y);
-    spawnBurst(game.particles, pos.x, pos.y, rgb, 14);
+    if (isStone(tile)) {
+      tile.stone -= 1;
+      tile.pop = 10;
+      spawnBurst(game.particles, pos.x, pos.y, [90, 84, 76], 12);
+      if (tile.stone <= 0) {
+        tile.alive = false;
+        tile.flash = TIMING.flashFrames;
+        tile.stone = 0;
+        game.phase = 'destroying';
+        game.destroyTimer = TIMING.destroyFrames;
+        game.pendingClear = { cells: [cell], specials: [], groups: [] };
+      }
+    } else if ((tile.ice || 0) > 0) {
+      tile.ice = 0;
+      tile.pop = 10;
+      spawnBurst(game.particles, pos.x, pos.y, [170, 220, 255], 10);
+      game.ui.showToast('Ice shattered');
+    } else {
+      const rgb = GEM_COLORS[Math.max(0, tile.type) % GEM_COLORS.length].fill;
+      spawnBurst(game.particles, pos.x, pos.y, rgb, 14);
+      tile.alive = false;
+      tile.flash = TIMING.flashFrames;
+      tile.jelly = 0;
+      tile.cursed = false;
+      game.phase = 'destroying';
+      game.destroyTimer = TIMING.destroyFrames;
+      game.pendingClear = { cells: [cell], specials: [], groups: [] };
+    }
     game.inventory.hammer--;
     game.activeBooster = null;
-    game.phase = 'destroying';
-    game.destroyTimer = TIMING.destroyFrames;
-    game.pendingClear = { cells: [cell], specials: [], groups: [] };
     sfx.special();
   } else if (name === 'scramble') {
     scrambleLine(game, cell);
@@ -468,36 +605,35 @@ function useBooster(game, cell) {
   game.ui.updateHud(hudPayload(game));
 }
 
-function preferAxis(game, cell) {
-  // Prefer the longer clear opportunity; fallback to row
-  return Math.random() < 0.5 ? 'row' : 'col';
-}
-
 function scrambleLine(game, cell) {
-  const axis = preferAxis(game, cell);
+  const axis = Math.random() < 0.5 ? 'row' : 'col';
   if (axis === 'row') {
     for (let x = 0; x < game.cols; x++) {
-      if (game.grid[cell.y][x].alive) {
-        game.grid[cell.y][x].type = Math.floor(Math.random() * 6);
-        game.grid[cell.y][x].pop = 10;
+      const t = game.grid[cell.y][x];
+      if (t.alive && !isStone(t) && t.type >= 0) {
+        t.type = Math.floor(Math.random() * 6);
+        t.pop = 10;
+        t.cursed = false;
       }
     }
   } else {
     for (let y = 0; y < game.rows; y++) {
-      if (game.grid[y][cell.x].alive) {
-        game.grid[y][cell.x].type = Math.floor(Math.random() * 6);
-        game.grid[y][cell.x].pop = 10;
+      const t = game.grid[y][cell.x];
+      if (t.alive && !isStone(t) && t.type >= 0) {
+        t.type = Math.floor(Math.random() * 6);
+        t.pop = 10;
+        t.cursed = false;
       }
     }
   }
 }
 
 function cycleLine(game, cell) {
-  const axis = preferAxis(game, cell);
+  const axis = Math.random() < 0.5 ? 'row' : 'col';
   if (axis === 'row') {
     for (let x = 0; x < game.cols; x++) {
       const t = game.grid[cell.y][x];
-      if (t.alive) {
+      if (t.alive && !isStone(t) && t.type >= 0) {
         t.type = (t.type + 1) % 6;
         t.pop = 10;
       }
@@ -505,7 +641,7 @@ function cycleLine(game, cell) {
   } else {
     for (let y = 0; y < game.rows; y++) {
       const t = game.grid[y][cell.x];
-      if (t.alive) {
+      if (t.alive && !isStone(t) && t.type >= 0) {
         t.type = (t.type + 1) % 6;
         t.pop = 10;
       }
@@ -566,6 +702,10 @@ export function drawFrame(game) {
         flash: tile.flash,
         pop: tile.pop,
         alpha: tile.alive ? 255 : Math.floor((tile.flash / TIMING.flashFrames) * 255),
+        ice: tile.ice || 0,
+        stone: tile.stone || 0,
+        jelly: tile.jelly || 0,
+        cursed: !!tile.cursed,
       });
       p5.pop();
     }
@@ -592,6 +732,27 @@ function updatePhase(game) {
   } else if (game.phase === 'falling') {
     if (!anyDropping(game.grid, game.cols, game.rows)) {
       afterFall(game);
+    }
+  } else if (game.phase === 'quaking') {
+    if (!anySliding(game.grid, game.cols, game.rows)) {
+      const plan = analyzeMatches(game.grid, game.cols, game.rows, null);
+      if (plan.cells.length > 0) {
+        game.combo = 1;
+        beginClear(game, plan);
+      } else {
+        const spawned = maybeSpawnHazards(
+          game.grid,
+          game.cols,
+          game.rows,
+          game.moves
+        );
+        if (spawned.length) {
+          game.ui.showToast(`Hazard: ${spawned.map((e) => e.kind).join(', ')}`);
+        }
+        game.phase = 'idle';
+        if (!hasValidMoves(game.grid, game.cols, game.rows)) endGame(game);
+        game.ui.updateHud(hudPayload(game));
+      }
     }
   }
 }

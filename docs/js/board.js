@@ -1,4 +1,5 @@
 import { GEM_COUNT, SPECIAL } from './config.js';
+import { isStone, isGem } from './hazards.js';
 
 export function createTile(type = null, special = SPECIAL.NONE) {
   return {
@@ -6,27 +7,25 @@ export function createTile(type = null, special = SPECIAL.NONE) {
     special,
     alive: true,
     selected: false,
-    // visual offsets in tile fractions (0..1 scale applied at render)
     slideX: 0,
     slideY: 0,
     drop: 0,
     flash: 0,
     pop: 0,
+    ice: 0,
+    stone: 0,
+    jelly: 0,
+    cursed: false,
   };
 }
 
-export function cloneVisualState(from, to) {
-  to.slideX = from.slideX;
-  to.slideY = from.slideY;
-  to.drop = from.drop;
-  to.flash = from.flash;
-  to.pop = from.pop;
-  to.selected = false;
+export function createStoneTile(hp = 1) {
+  const t = createTile(-1);
+  t.stone = hp;
+  t.type = -1;
+  return t;
 }
 
-/**
- * Create an empty NxM grid of nulls, then fill without initial matches.
- */
 export function createBoard(cols, rows) {
   const grid = [];
   for (let y = 0; y < rows; y++) {
@@ -48,31 +47,49 @@ function createTileNoMatch(grid, x, y) {
 }
 
 function wouldMatchAt(grid, x, y, type) {
-  if (x >= 2 && grid[y][x - 1]?.type === type && grid[y][x - 2]?.type === type) return true;
-  if (y >= 2 && grid[y - 1]?.[x]?.type === type && grid[y - 2]?.[x]?.type === type) return true;
+  if (x >= 2) {
+    const a = grid[y][x - 1];
+    const b = grid[y][x - 2];
+    if (isGem(a) && isGem(b) && a.type === type && b.type === type) return true;
+  }
+  if (y >= 2) {
+    const a = grid[y - 1]?.[x];
+    const b = grid[y - 2]?.[x];
+    if (isGem(a) && isGem(b) && a.type === type && b.type === type) return true;
+  }
   return false;
 }
 
+/**
+ * Gravity with immovable stones: gems fall down but cannot pass through stones.
+ */
 export function applyGravity(grid, cols, rows) {
   let moved = false;
+
   for (let x = 0; x < cols; x++) {
     for (let y = rows - 1; y >= 0; y--) {
-      if (!grid[y][x].alive) {
-        for (let above = y - 1; above >= 0; above--) {
-          if (grid[above][x].alive) {
-            const falling = grid[above][x];
-            grid[y][x] = falling;
-            grid[above][x] = createTile();
-            grid[above][x].alive = false;
-            falling.drop += (y - above);
-            moved = true;
-            break;
-          }
+      const cell = grid[y][x];
+      if (cell.alive) continue;
+      // empty — pull next gem from above (stop at stone)
+      for (let above = y - 1; above >= 0; above--) {
+        const cand = grid[above][x];
+        if (isStone(cand)) break;
+        if (isGem(cand) || (cand.alive && !isStone(cand))) {
+          // move any non-stone alive tile (gem)
+          if (!isGem(cand)) break;
+          grid[y][x] = cand;
+          grid[above][x] = createTile();
+          grid[above][x].alive = false;
+          // preserve jelly? jelly is on cell conceptually — keep on tile as it moves
+          cand.drop += y - above;
+          moved = true;
+          break;
         }
       }
     }
   }
 
+  // Spawn gems into remaining empty cells (not through stones — empties are just empties)
   for (let x = 0; x < cols; x++) {
     let spawnCount = 0;
     for (let y = 0; y < rows; y++) {
@@ -82,6 +99,7 @@ export function applyGravity(grid, cols, rows) {
     for (let y = 0; y < rows; y++) {
       if (!grid[y][x].alive) {
         const tile = createTile();
+        // Chance to enter frozen as game goes long is handled in maybeSpawnHazards
         tile.drop = spawnCount - spawned;
         grid[y][x] = tile;
         spawned++;
@@ -93,7 +111,6 @@ export function applyGravity(grid, cols, rows) {
   return moved;
 }
 
-/** Rotate grid 90° clockwise (dir=1) or counter-clockwise (dir=-1). */
 export function rotateGrid(grid, cols, rows, dir) {
   const newCols = rows;
   const newRows = cols;
@@ -145,9 +162,7 @@ export function tickMotion(grid, cols, rows, dropSpeed, swapSpeed) {
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const t = grid[y][x];
-      if (t.drop > 0) {
-        t.drop = Math.max(0, t.drop - dropSpeed);
-      }
+      if (t.drop > 0) t.drop = Math.max(0, t.drop - dropSpeed);
       if (t.slideX !== 0) {
         const step = Math.sign(t.slideX) * Math.min(Math.abs(t.slideX), swapSpeed);
         t.slideX -= step;
