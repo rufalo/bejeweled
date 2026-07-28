@@ -1,215 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
-    <head>
+  <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Match Three</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+    />
+    <meta name="theme-color" content="#071016" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Jewel Cascade</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700&family=Sora:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/game.css" />
     <script src="p5.min.js"></script>
-    <script src="addons/p5.dom.min.js"></script>
-    <script src="game.js?v=2"></script>
-    <style>
-      body {
-        padding: 0;
-        margin: 0;
-        background: #000;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        overflow: hidden;
-      }
-      main {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-      }
-      canvas {
-        display: block;
-      }
-      #game-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-      #ui-container {
-        margin-top: 20px;
-        display: flex;
-        gap: 20px;
-        align-items: center;
-        justify-content: center;
-        flex-wrap: wrap;
-      }
-      .restart-btn {
-        background-color: #4CAF50;
-        border: none;
-        color: white;
-        padding: 12px 24px;
-        text-align: center;
-        text-decoration: none;
-        display: inline-block;
-        font-size: 16px;
-        font-family: sans-serif;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.3s;
-      }
-      .restart-btn:hover {
-        background-color: #45a049;
-      }
-      .restart-btn:active {
-        background-color: #3d8b40;
-      }
-      .rotate-btn {
-        background-color: #673AB7;
-        border: none;
-        color: white;
-        padding: 12px 20px;
-        text-align: center;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        font-size: 16px;
-        font-family: sans-serif;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.3s, transform 0.2s;
-        min-width: 150px;
-      }
-      .rotate-btn:hover {
-        background-color: #5E35B1;
-        transform: translateY(-1px);
-      }
-      .rotate-btn:active {
-        background-color: #512DA8;
-        transform: translateY(0);
-      }
-      #items-container {
-        margin-top: 15px;
-        display: flex;
-        gap: 15px;
-        justify-content: center;
-        align-items: center;
-      }
-      .item-btn {
-        background-color: #2196F3;
-        border: none;
-        color: white;
-        padding: 10px 15px;
-        text-align: center;
-        text-decoration: none;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        font-size: 14px;
-        font-family: sans-serif;
-        cursor: pointer;
-        border-radius: 8px;
-        transition: all 0.3s;
-        min-width: 100px;
-      }
-      .item-btn:hover:not(:disabled) {
-        background-color: #1976D2;
-        transform: translateY(-2px);
-      }
-      .item-btn:active:not(:disabled) {
-        background-color: #1565C0;
-        transform: translateY(0);
-      }
-      .item-btn:disabled {
-        background-color: #666;
-        cursor: not-allowed;
-        opacity: 0.5;
-      }
-      .item-btn.active {
-        background-color: #FF9800;
-        box-shadow: 0 0 15px rgba(255, 152, 0, 0.7);
-      }
-      .item-name {
-        font-weight: bold;
-        margin-bottom: 5px;
-      }
-      .item-count {
-        font-size: 18px;
-        font-weight: bold;
-      }
-      .cancel-btn {
-        background-color: #f44336;
-        border: none;
-        color: white;
-        padding: 12px 20px;
-        text-align: center;
-        text-decoration: none;
-        display: none;
-        font-size: 16px;
-        font-family: sans-serif;
-        cursor: pointer;
-        border-radius: 4px;
-        transition: background-color 0.3s;
-      }
-      .cancel-btn.visible {
-        display: inline-block;
-      }
-      .cancel-btn:hover {
-        background-color: #d32f2f;
-      }
-      #score-container {
-        margin-top: 15px;
-        display: flex;
-        gap: 30px;
-        justify-content: center;
-        align-items: center;
-        font-family: sans-serif;
-        color: white;
-        font-size: 20px;
-      }
-      .score-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-      }
-      .score-label {
-        font-size: 14px;
-        color: #aaa;
-        margin-bottom: 5px;
-      }
-      .score-value {
-        font-size: 28px;
-        font-weight: bold;
-      }
-      .fallback {
-        font-family: sans-serif;
-        color: #fff;
-        margin-top: 1rem;
-      }
-    </style>
   </head>
   <body>
-    <main>
-      <div id="game-container"></div>
-      <div id="score-container">
-        <div class="score-item">
-          <div class="score-label">Score</div>
-          <div class="score-value" id="score-display">0</div>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand-row">
+          <div class="brand">Jewel Cascade</div>
+          <button id="btn-mute" class="icon-btn" type="button" aria-pressed="false">
+            Sound On
+          </button>
         </div>
-        <div class="score-item">
-          <div class="score-label">Moves</div>
-          <div class="score-value" id="moves-display">0</div>
+        <div class="hud" aria-live="polite">
+          <div class="stat">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="score-value">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Moves</span>
+            <span class="stat-value" id="moves-value">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value" id="best-value">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Combo</span>
+            <span class="stat-value" id="combo-value">—</span>
+          </div>
         </div>
-        <div class="score-item">
-          <div class="score-label">Best</div>
-          <div class="score-value" id="best-display">0</div>
+      </header>
+
+      <section class="board-wrap" aria-label="Game board">
+        <div id="board-host"></div>
+        <div id="mode-hint" class="mode-hint" role="status"></div>
+      </section>
+
+      <footer class="toolbar">
+        <div class="boosters">
+          <button id="btn-hammer" class="tool-btn" type="button" disabled>
+            <span>Hammer</span>
+            <span class="tool-count" id="count-hammer">0</span>
+          </button>
+          <button id="btn-scramble" class="tool-btn" type="button" disabled>
+            <span>Scramble</span>
+            <span class="tool-count" id="count-scramble">0</span>
+          </button>
+          <button id="btn-cycle" class="tool-btn" type="button" disabled>
+            <span>Cycle</span>
+            <span class="tool-count" id="count-cycle">0</span>
+          </button>
         </div>
-      </div>
-      <div id="items-container"></div>
-      <div id="ui-container"></div>
-      <noscript>
-        <p class="fallback">
-          JavaScript is required to play the match three game.
+        <div class="actions">
+          <button id="btn-hint" class="action-btn" type="button">Hint</button>
+          <button id="btn-rotate-l" class="action-btn" type="button">⟲ Left</button>
+          <button id="btn-rotate-r" class="action-btn" type="button">Right ⟳</button>
+          <button id="btn-restart" class="action-btn danger" type="button">Restart</button>
+          <button id="btn-cancel" class="action-btn cancel" type="button">Cancel booster</button>
+        </div>
+        <p class="hint-line">Swipe gems to swap · Match 4 for rockets · Match 5 for bombs</p>
+      </footer>
+    </div>
+
+    <div id="start-overlay" class="overlay">
+      <div class="overlay-card">
+        <h1>Jewel Cascade</h1>
+        <p>
+          Swipe to swap. Chain cascades for combos. Match four for a rocket, five for a bomb.
+          Built for phones — play with your thumbs.
         </p>
-      </noscript>
-    </main>
+        <button id="btn-play" class="primary" type="button">Play</button>
+      </div>
+    </div>
+
+    <div id="gameover-overlay" class="overlay hidden">
+      <div class="overlay-card">
+        <h2>No moves left</h2>
+        <div class="over-stats">
+          <div>
+            <span>Score</span>
+            <strong id="over-score">0</strong>
+          </div>
+          <div>
+            <span>Best</span>
+            <strong id="over-best">0</strong>
+          </div>
+        </div>
+        <button id="btn-again" class="primary" type="button">Play again</button>
+      </div>
+    </div>
+
+    <noscript>
+      <p class="noscript">JavaScript is required to play Jewel Cascade.</p>
+    </noscript>
+
+    <script type="module" src="js/main.js"></script>
   </body>
 </html>
