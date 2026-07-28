@@ -54,10 +54,14 @@ export function drawGem(p5, tileSize, type, special, opts = {}) {
   p5.scale(scale);
   p5.translate(-cx, -cy);
 
-  // Jelly underlay
+  // Jelly underlay — vivid so it reads on mobile
   if (jelly > 0) {
     p5.noStroke();
-    p5.fill(180, 70, 160, 90);
+    p5.fill(200, 60, 170, 140);
+    p5.rect(pad * 0.35, pad * 0.35, tileSize - pad * 0.7, tileSize - pad * 0.7, tileSize * 0.22);
+    p5.stroke(255, 140, 220, 180);
+    p5.strokeWeight(2);
+    p5.noFill();
     p5.rect(pad * 0.5, pad * 0.5, tileSize - pad, tileSize - pad, tileSize * 0.2);
   }
 

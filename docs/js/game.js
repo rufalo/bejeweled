@@ -299,7 +299,11 @@ function trySwap(game, a, b) {
   const t2 = game.grid[b.y][b.x];
   if (!canSwapTile(t1) || !canSwapTile(t2)) {
     sfx.invalid();
-    game.ui.showToast('Frozen or blocked!');
+    if (game.selected) clearSelection(game);
+    // Pulse the blocked tiles
+    if (!canSwapTile(t1)) t1.pop = 12;
+    if (!canSwapTile(t2)) t2.pop = 12;
+    game.ui.showToast('Frozen or blocked — crack it first!');
     return;
   }
 

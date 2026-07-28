@@ -31,8 +31,8 @@ export function matchableType(tile) {
 
 /** Seed opening board with light jelly + a few iced gems. */
 export function seedOpeningHazards(grid, cols, rows) {
-  const jellyBudget = 8 + Math.floor(Math.random() * 5);
-  const iceBudget = 3 + Math.floor(Math.random() * 3);
+  const jellyBudget = 6 + Math.floor(Math.random() * 4);
+  const iceBudget = 2 + Math.floor(Math.random() * 2);
   let placed = 0;
 
   // Jelly on lower half (more strategic)
