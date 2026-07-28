@@ -13,8 +13,8 @@ export const DIFFICULTIES = {
     moveBase: 25,
     moveStep: 1,
     moveMin: 14,
-    targetBase: 450,
-    targetStep: 380,
+    targetBase: 350,
+    targetStep: 320,
     xpMult: 1,
   },
   hard: {
@@ -24,8 +24,8 @@ export const DIFFICULTIES = {
     moveBase: 20,
     moveStep: 1,
     moveMin: 12,
-    targetBase: 550,
-    targetStep: 460,
+    targetBase: 420,
+    targetStep: 400,
     xpMult: 1.35,
   },
   brutal: {
@@ -35,8 +35,8 @@ export const DIFFICULTIES = {
     moveBase: 16,
     moveStep: 1,
     moveMin: 10,
-    targetBase: 650,
-    targetStep: 520,
+    targetBase: 500,
+    targetStep: 460,
     xpMult: 1.75,
   },
 };
