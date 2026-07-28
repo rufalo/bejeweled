@@ -22,6 +22,10 @@ ES modules need an HTTP server (`file://` will fail CORS).
 - Hint, board rotate, combo scoring, particles, Web Audio SFX
 - High score / mute / best combo in `localStorage`
 
+## What’s next
+See `plan.md` for the post-remake roadmap (Fever Mode, Daily Seed, Gravity Flip, Relic Run, and more).
+
+
 ## Manual test checklist
 - Board loads with no opening matches
 - Swipe adjacent gems to swap; invalid swaps bounce back
