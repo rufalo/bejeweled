@@ -464,7 +464,7 @@ body {
 .overlay {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 40;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -473,6 +473,14 @@ body {
     radial-gradient(80% 60% at 50% 20%, rgba(46, 196, 160, 0.18), transparent 55%),
     rgba(4, 10, 12, 0.82);
   backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.overlay .overlay-card,
+.overlay button {
+  pointer-events: auto;
+  position: relative;
+  z-index: 41;
 }
 
 .overlay.hidden {
