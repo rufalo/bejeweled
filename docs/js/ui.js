@@ -32,17 +32,25 @@ export function createUI(handlers) {
     if (!el) return;
     let lock = false;
     const go = (e) => {
-      if (e) e.preventDefault();
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       if (lock) return;
       lock = true;
       setTimeout(() => {
         lock = false;
-      }, 280);
+      }, 300);
       unlockAudio();
-      sfx.button();
+      try {
+        sfx.button();
+      } catch (_) {
+        /* audio optional */
+      }
       fn();
     };
-    // pointerup covers mouse + touch without double-firing
+    // click + pointerup so desktop, trackpad, and touch all work
+    el.addEventListener('click', go);
     el.addEventListener('pointerup', go);
   }
 
@@ -85,6 +93,36 @@ export function createUI(handlers) {
     if (els.overOverlay) els.overOverlay.classList.add('hidden');
   }
 
+  function setCount(countEl, btn, n, active, busy) {
+    if (countEl) countEl.textContent = String(n);
+    if (btn) {
+      btn.disabled = busy || (n <= 0 && !active);
+      btn.classList.toggle('active', !!active);
+    }
+  }
+
+  function boosterHint(name) {
+    if (name === 'hammer') return 'Tap a gem to smash it';
+    if (name === 'scramble') return 'Tap a gem to scramble its row/col';
+    if (name === 'cycle') return 'Tap a gem to cycle its row/col colors';
+    return '';
+  }
+
+  let toastTimer = null;
+
+  function showToast(message) {
+    if (!els.modeHint) return;
+    els.modeHint.textContent = message;
+    els.modeHint.classList.add('visible');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      toastTimer = null;
+      if (!els.cancel?.classList.contains('visible')) {
+        els.modeHint.classList.remove('visible');
+      }
+    }, 2200);
+  }
+
   function updateHud({ score, moves, best, combo, inventory, activeBooster, busy }) {
     if (els.score) els.score.textContent = String(score);
     if (els.moves) els.moves.textContent = String(moves);
@@ -98,29 +136,20 @@ export function createUI(handlers) {
     if (els.hint) els.hint.disabled = lock;
     if (els.rotateL) els.rotateL.disabled = lock;
     if (els.rotateR) els.rotateR.disabled = lock;
-    // Boosters: disabled when empty (unless active) or when board is busy
+
     setCount(els.hammerCount, els.hammer, inventory.hammer, activeBooster === 'hammer', lock);
     setCount(els.scrambleCount, els.scramble, inventory.scramble, activeBooster === 'scramble', lock);
     setCount(els.cycleCount, els.cycle, inventory.cycle, activeBooster === 'cycle', lock);
 
-  function boosterHint(name) {
-    if (name === 'hammer') return 'Tap a gem to smash it';
-    if (name === 'scramble') return 'Tap a gem to scramble its row/col';
-    if (name === 'cycle') return 'Tap a gem to cycle its row/col colors';
-    return '';
-  }
-
-  let toastTimer = null;
-  function showToast(message) {
-    if (!els.modeHint) return;
-    els.modeHint.textContent = message;
-    els.modeHint.classList.add('visible');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      if (!document.getElementById('btn-cancel')?.classList.contains('visible')) {
-        els.modeHint.classList.remove('visible');
-      }
-    }, 2200);
+    if (els.cancel) {
+      els.cancel.classList.toggle('visible', !!activeBooster);
+    }
+    if (els.modeHint && activeBooster) {
+      els.modeHint.textContent = boosterHint(activeBooster);
+      els.modeHint.classList.add('visible');
+    } else if (els.modeHint && !toastTimer) {
+      els.modeHint.classList.remove('visible');
+    }
   }
 
   updateMuteButton();
