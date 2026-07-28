@@ -61,16 +61,24 @@ export function createUI(handlers) {
     if (!el) return;
     let lock = false;
     const go = (e) => {
-      if (e) e.preventDefault();
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       if (lock) return;
       lock = true;
       setTimeout(() => {
         lock = false;
-      }, 280);
+      }, 300);
       unlockAudio();
-      sfx.button();
+      try {
+        sfx.button();
+      } catch (_) {
+        /* audio optional */
+      }
       fn();
     };
+    el.addEventListener('click', go);
     el.addEventListener('pointerup', go);
   }
 
